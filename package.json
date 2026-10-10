@@ -1,0 +1,62 @@
+{
+  "name": "mb-store",
+  "productName": "MB Store",
+  "version": "1.0.0",
+  "description": "MB Store POS (desktop)",
+  "main": "main.js",
+  "author": "MB",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64",
+    "pack": "electron-builder --win --dir --x64",
+    "test:e2e": "node test/run-e2e.js"
+  },
+  "build": {
+    "appId": "com.mb.store",
+    "productName": "MB Store",
+    "copyright": "MB",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MB Store",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "MB-Store-Setup-${version}.exe"
+    },
+    "electronLanguages": [
+      "ar",
+      "en-US"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  }
+}
