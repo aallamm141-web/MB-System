@@ -1,10 +1,12 @@
-name: Build Windows installer
+name: Release Windows installer
 on:
-  workflow_dispatch:
   push:
     tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
 jobs:
-  build:
+  release:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,8 +14,9 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - run: npm run dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: MB-Store-Setup
-          path: dist/*.exe
+      - name: Tell the build which GitHub repo the updates come from
+        run: npm pkg set repository.type=git repository.url=https://github.com/${{ github.repository }}.git
+      - name: Build and publish the release
+        run: npx electron-builder --win nsis --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
