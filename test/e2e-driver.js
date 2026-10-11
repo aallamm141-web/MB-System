@@ -17,6 +17,7 @@ module.exports = async (win, ctx) => {
     ok(env.subtle, 'crypto.subtle available');
     ok(env.origin === 'app://mb', 'stable origin app://mb (got ' + env.origin + ')');
     ok(env.api.includes('saveBackup') && env.api.includes('print') && env.api.includes('readBackup'), 'preload API exposed');
+    ok(['updateStatus','updateCheck','updateDownload','updateInstall','onUpdate','savePreUpdate'].every((k) => env.api.includes(k)), 'update API exposed');
     ok(!(await js("typeof require")).includes('function'), 'page has no direct Node access');
     const dir = ctx.backupDir();
 
@@ -42,6 +43,19 @@ module.exports = async (win, ctx) => {
       ok((await js("shopAPI.readBackup('../../etc/passwd')")).ok === false, 'path traversal rejected');
       const lst = await js("shopAPI.listBackups()");
       ok(Array.isArray(lst) && lst.length === 1, 'listBackups ok');
+      // update safety: pre-update copy + status API (updater itself is off in tests)
+      const us = await js("shopAPI.updateStatus()");
+      ok(us && us.state === 'disabled' && typeof us.current === 'string', 'updater reports state (' + (us && us.state) + ', current ' + (us && us.current) + ')');
+      ok((await js("shopAPI.updateInstall()")).ok === false, 'install refuses when no update is ready');
+      ok((await js("shopAPI.updateDownload()")).ok === false, 'download refuses when no update is offered');
+      ok(await js("(()=>{UPD={state:'available',version:'9.9.9',notes:'x',percent:0,current:'1.0.0'};updSnooze=0;updBar();const a=$('#updbar').style.display!=='none'&&/حمّل التحديث/.test($('#updbar').innerHTML)&&/لاحقًا/.test($('#updbar').innerHTML)&&$('#updbadge').style.display!=='none';updLater();updBar();const b=$('#updbar').style.display==='none'&&$('#updbadge').style.display!=='none';UPD={state:'idle'};updBar();return a&&b&&$('#updbadge').style.display==='none'})()"), 'banner: download/later, badge stays after Later, clears when idle');
+      ok(await js("S.dv===DATA_VER"), 'data version stamped on the data');
+      const pu = await js("shopAPI.savePreUpdate(JSON.stringify(S),'9.9.9')");
+      ok(pu && pu.ok && fs.existsSync(path.join(dir, pu.name)), 'pre-update safety copy written: ' + (pu && pu.name));
+      ok((await js("shopAPI.savePreUpdate('{\"x\":1,\"padding\":\"zzzzzzzzzzzzzzzzzzzz\"}','1.0.1')")).ok === false, 'a broken pre-update copy is refused');
+      for (let i = 0; i < 7; i++) { await js("shopAPI.savePreUpdate(JSON.stringify(S),'1.0." + i + "')"); await sleep(15); }
+      ok(fs.readdirSync(dir).filter((n) => /^MB-pre-update-/.test(n)).length === 5, 'only the last 5 pre-update copies are kept');
+      ok((await js("shopAPI.listBackups()")).every((f) => !/pre-update/.test(f.name)), 'pre-update copies never mix with the daily backups list');
       // config + print
       const pl = await js("shopAPI.printers()");
       ok(Array.isArray(pl), 'printers() returns a list (' + pl.length + ' here)');
@@ -79,6 +93,9 @@ module.exports = async (win, ctx) => {
       ok((await js("S.s.length")) === 2, 'restoring garbage text leaves the data untouched');
       // restore point (snapshot) created by the restore
       ok((await js("snapMetas().then(l=>l.some(m=>/قبل الاسترجاع/.test(m.label||'')))")) === true, 'a restore point was created before restoring');
+      // a locked (newer-version) database must never be overwritten by this version
+      const kept = await js("(async()=>{SAVE_LOCK=true;const n=S.p.length;S.p.push({id:id(),cid:S.p[0].cid,name:'LOCKTEST',br:'',fl:'',sz:'',bc:'',price:1,min:1,h:[],at:{}});save();await new Promise(r=>setTimeout(r,250));const got=await load();SAVE_LOCK=false;S.p.pop();return got.p.length===n})()");
+      ok(kept === true, 'save lock: data written by a newer version is not overwritten');
     }
   } catch (e) { ok(false, 'exception: ' + (e && e.stack || e)); }
   console.log('E2E_RESULT ' + JSON.stringify(out));

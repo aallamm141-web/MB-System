@@ -9,9 +9,10 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis --x64",
+    "dist": "electron-builder --win nsis --x64 --publish never",
     "pack": "electron-builder --win --dir --x64",
-    "test:e2e": "node test/run-e2e.js"
+    "test:e2e": "node test/run-e2e.js",
+    "release": "electron-builder --win nsis --x64 --publish always"
   },
   "build": {
     "appId": "com.mb.store",
@@ -41,22 +42,32 @@
       "icon": "build/icon.ico"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "MB Store",
       "deleteAppDataOnUninstall": false,
-      "artifactName": "MB-Store-Setup-${version}.exe"
+      "artifactName": "MB-Store-Setup-${version}.exe",
+      "runAfterFinish": true,
+      "include": "build/installer.nsh"
     },
     "electronLanguages": [
       "ar",
       "en-US"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "release"
+      }
     ]
   },
   "devDependencies": {
     "electron": "^44.7.0",
     "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

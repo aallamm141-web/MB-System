@@ -13,6 +13,12 @@ contextBridge.exposeInMainWorld('shopAPI', {
   pickBackup: () => ipcRenderer.invoke('pickBackup'),
   chooseBackupDir: () => ipcRenderer.invoke('chooseBackupDir'),
   openBackupDir: () => ipcRenderer.invoke('openBackupDir'),
+  savePreUpdate: (text, ver) => ipcRenderer.invoke('savePreUpdate', text, ver),
+  updateStatus: () => ipcRenderer.invoke('updateStatus'),
+  updateCheck: () => ipcRenderer.invoke('updateCheck'),
+  updateDownload: () => ipcRenderer.invoke('updateDownload'),
+  updateInstall: () => ipcRenderer.invoke('updateInstall'),
+  onUpdate: (cb) => ipcRenderer.on('update-state', (_e, s) => cb(s)),
   onBeforeClose: (cb) => ipcRenderer.on('before-close', () => cb()),
   closeAck: () => ipcRenderer.send('close-ack'),
 });

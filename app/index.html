@@ -26,6 +26,7 @@ dialog{border:1px solid var(--bd);border-radius:12px;background:var(--cd);color:
 *{-webkit-tap-highlight-color:transparent}html{-webkit-text-size-adjust:100%}button,label{touch-action:manipulation}
 .btnl{display:inline-block;padding:7px 12px;border:1px solid var(--bd);border-radius:8px;cursor:pointer;color:var(--tx);background:var(--cd);margin:0;font-size:inherit;text-align:center}
 #cartbar{display:none}
+#updbar{background:var(--br);color:#fff;padding:8px 14px;text-align:center;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}#updbar button{background:#fff;color:var(--br);border:0;font-weight:700}#updbar button.ghost{background:transparent;color:#fff;border:1px solid #fff9}#updbadge{background:var(--br);color:#fff;border:0;border-radius:99px;padding:4px 12px;font-size:.85em;font-weight:700;cursor:pointer}
 .rc .rl{width:96px;height:96px;display:block;margin:0 auto 2px}
 @media(min-width:901px){.pos>.card:last-child{position:sticky;top:72px;align-self:start;max-height:calc(100vh - 88px);overflow:auto}}
 @media(min-width:1400px){body{font-size:16px}}
@@ -49,7 +50,8 @@ dialog{border:1px solid var(--bd);border-radius:12px;background:var(--cd);color:
 .rc hr{border:0;border-top:1px dashed #000;margin:6px 0}.rc .t{display:flex;justify-content:space-between;gap:8px}.rc .hd{display:flex;justify-content:space-between;font-weight:700;border-bottom:1px solid #000;padding-bottom:2px}.rc .it{padding:3px 0;border-bottom:1px dotted #888}.rc .in{font-weight:700;word-break:break-word}.rc .iv{display:flex;justify-content:space-between;gap:8px}.rc bdi{unicode-bidi:isolate}
 @media print{body>*:not(#rcpt){display:none!important}#rcpt{display:block!important}@page{size:80mm auto;margin:2mm}}
 </style></head><body>
-<header><img class="lg" id="hl" alt="MB"><h1>MB</h1><nav id="nav"></nav></header>
+<header><img class="lg" id="hl" alt="MB"><h1>MB</h1><button id="updbadge" style="display:none" onclick="updSnooze=0;updBar()"></button><nav id="nav"></nav></header>
+<div id="updbar" style="display:none"></div>
 <main id="v"></main><dialog id="dlg"></dialog><dialog id="cam"><video id="vid" playsinline muted style="width:100%;border-radius:8px"></video><button onclick="stopCam()" style="width:100%;margin-top:8px">إلغاء</button></dialog>
 <div id="rcpt"></div><div id="toast" popover="manual" role="status"></div>
 <script>
@@ -60,8 +62,9 @@ let S={p:[],b:[],s:[],n:1,u:[],log:[]},me=null,DB=null,lastAct=Date.now();
 const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open('gymshop',1);r.onupgradeneeded=()=>r.result.createObjectStore('k');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
 async function load(){try{DB=await idb();return await new Promise(r=>{const q=DB.transaction('k').objectStore('k').get('S');q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})}catch(e){return null}}
 let sfOnce=0;const saveFail=e=>{if(sfOnce++)return;alert('⚠️ تعذر حفظ البيانات على الجهاز ('+((e&&e.name)||'خطأ')+'). خد نسخة احتياطية فورًا ومتقفلش الصفحة.')};
+const DATA_VER=1;let SAVE_LOCK=false;
 let svT=0,lastAuto=0;
-function doSave(){svT=0;if(!DB)return;try{const tx=DB.transaction('k','readwrite');tx.objectStore('k').put(S,'S');tx.onerror=tx.onabort=()=>saveFail(tx.error)}catch(e){saveFail(e)}
+function doSave(){svT=0;if(!DB||SAVE_LOCK)return;try{const tx=DB.transaction('k','readwrite');tx.objectStore('k').put(S,'S');tx.onerror=tx.onabort=()=>saveFail(tx.error)}catch(e){saveFail(e)}
   snapSoon();if(Date.now()-lastAuto>6e5){lastAuto=Date.now();bkAuto(false)}}
 const save=()=>{IX=null;SRT=null;if(!DB||svT)return;svT=setTimeout(doSave,50)};
 const flushSave=()=>{if(svT){clearTimeout(svT);doSave()}};
@@ -1000,6 +1003,28 @@ function vQp(){const L0=act().filter(p=>!(p.price>0)),L=L0.slice(0,100);
 function qpSet(i,v){const p=P(i),n=+v;if(!(n>0))return;p.h.push([today(),p.price,n]);p.price=n;save();const e=$('#qpc');if(e)e.textContent=act().filter(x=>!(x.price>0)).length+' منتج من '+act().length+' من غير سعر'}
 function qpKey(e){if(e.key!=='Enter')return;e.preventDefault();const a=[...document.querySelectorAll('.qpi')],n=a[a.indexOf(e.target)+1];if(n)n.focus()}
 /* ---------- Desktop (Electron) layer ---------- */
+let UPD={state:'idle',version:'',percent:0,current:''},updBk='';
+async function updSafetyCopy(ver){try{flushSave();await bkAuto(true);const r=await shopAPI.savePreUpdate(JSON.stringify(S),ver);return !!(r&&r.ok)}catch(e){return false}}
+let updSnooze=0;
+function updBar(){const b=$('#updbar'),g=$('#updbadge'),s=UPD.state,pend=['available','downloading','ready'].includes(s);
+  if(g){g.style.display=pend?'':'none';g.textContent=s=='ready'?'🔔 تحديث جاهز':s=='downloading'?'⬇️ '+(UPD.percent||0)+'%':'🔔 تحديث متاح'}
+  if(!b)return;
+  if(!pend||(Date.now()<updSnooze&&s!=='downloading')){b.style.display='none';return}
+  b.style.display='flex';
+  if(s==='available')b.innerHTML=`🔔 إصدار جديد (${esc(UPD.version)}) متاح.${UPD.notes?' <small>'+esc(UPD.notes)+'</small>':''} <button onclick="updDownload()">حمّل التحديث</button><button class="ghost" onclick="updLater()">لاحقًا</button>`;
+  else if(s==='downloading')b.innerHTML=`⬇️ بينزّل التحديث (${esc(UPD.version)})… ${UPD.percent||0}% — كمّل شغلك عادي`;
+  else b.innerHTML=`✅ التحديث (${esc(UPD.version)}) جاهز. هيتثبت لوحده لما تقفل البرنامج، وبياناتك محفوظة. <button onclick="updNow()">ثبّته دلوقتي</button><button class="ghost" onclick="updLater()">لاحقًا</button>`}
+function updLater(){updSnooze=Date.now()+4*3600e3;updBar()}
+async function updDownload(){const r=await shopAPI.updateDownload();if(!r||!r.ok)toast('مش قادر أبدأ التحميل دلوقتي','bad',4000)}
+setInterval(()=>{if(window.UPD)updBar()},60000);
+async function updNow(){if(!me||!confirm('هيتعمل نسخة احتياطية الأول، وبعدين البرنامج هيقفل ويتحدّث ويفتح تاني لوحده. كمّل؟'))return;
+  toast('⏳ بنعمل نسخة احتياطية قبل التحديث…','ok',20000);const ok=await updSafetyCopy(UPD.version);
+  if(!ok&&!confirm('ما قدرتش أعمل نسخة الأمان. تكمّل التحديث برضه؟'))return;
+  const r=await shopAPI.updateInstall();if(!r||!r.ok)toast('التحديث مش جاهز دلوقتي','bad',4000)}
+function updUI(){const e=$('#upd');if(!e)return;const s=UPD.state,T={disabled:'التحديث متوقف (وضع اختبار)',unsupported:'التحديث التلقائي مش متاح في النسخة دي. ثبّت البرنامج بملف Setup.exe عشان يتحدّث لوحده.',idle:'لسه ما فحصش',checking:'بيفحص…',uptodate:'✅ عندك آخر إصدار',available:'إصدار '+(UPD.version||'')+' متاح للتحميل',downloading:'بينزّل تحديث '+(UPD.version||'')+' ('+(UPD.percent||0)+'%)',ready:'✅ تحديث '+(UPD.version||'')+' جاهز للتثبيت',error:'تعذر الفحص (تأكد من الإنترنت). بياناتك سليمة.'};
+  e.innerHTML=`<div style="margin-top:10px">🔄 التحديثات: <b>${esc(T[s]||s)}</b> <small class="mu">(إصدارك ${esc(UPD.current||'')})</small> ${s==='ready'?'<button class="pri" onclick="updNow()">ثبّته دلوقتي</button>':''}${s==='available'?'<button class="pri" onclick="updDownload()">حمّل التحديث</button>':''} ${['idle','uptodate','error'].includes(s)?'<button onclick="shopAPI.updateCheck().then(()=>setTimeout(()=>shopAPI.updateStatus().then(x=>{UPD=x;updUI()}),1500))">افحص دلوقتي</button>':''}</div><small class="mu">التحديث بيتثبت لما تقفل البرنامج. قبله بتتعمل نسخة أمان في فولدر النسخ (MB-pre-update-…)، وبياناتك مش بتتلمس.</small>`}
+if(window.shopAPI&&shopAPI.onUpdate){shopAPI.updateStatus().then(s=>{UPD=s;updBar()}).catch(()=>{});
+  shopAPI.onUpdate(async s=>{UPD=s;updBar();if(s.state==='ready'&&updBk!==s.version){updBk=s.version;updSafetyCopy(s.version)}if($('#upd'))updUI()})}
 async function elUI(e){const A=window.shopAPI;let info={},L=[],pr=[];try{info=await A.info();L=await A.listBackups();pr=await A.printers()}catch(x){}
   e.innerHTML=`<div class="card"><b>🖥️ برنامج ويندوز</b> <small class="mu">إصدار ${esc(info.version||'')}</small>
   <div style="margin-top:6px">📁 فولدر النسخ الاحتياطي: <b dir="ltr">${esc(info.backupDir||'')}</b></div><div class="row"><button onclick="shopAPI.openBackupDir()">افتح الفولدر</button><button onclick="elChoose()">تغيير الفولدر</button><button onclick="bkAuto(true).then(()=>{toast('اتحفظت نسخة ✔','ok',2000);elUI($('#bkd'))})">احفظ نسخة الآن</button></div>
@@ -1007,7 +1032,7 @@ async function elUI(e){const A=window.shopAPI;let info={},L=[],pr=[];try{info=aw
   <div style="margin-top:10px">🖨️ الطابعة: <select onchange="elCfg({printer:this.value})"><option value="">— اسأل في كل مرة (نافذة الطباعة) —</option>${pr.map(p=>`<option value="${esc(p.name)}" ${p.name==info.printer?'selected':''}>${esc(p.displayName||p.name)}${p.isDefault?' (الافتراضية)':''}</option>`).join('')}</select>
   <select onchange="elCfg({paper:this.value})">${['80','58'].map(v=>`<option value="${v}" ${v==(info.paper||'80')?'selected':''}>ورق ${v}مم</option>`).join('')}</select> <button onclick="elTestPrint()">طباعة تجريبية</button></div>
   <small class="mu">لو اخترت طابعة، الفاتورة بتتطبع على طول من غير نافذة.</small>
-  <div style="margin-top:10px"><b>النسخ المحفوظة:</b>${L.slice(0,10).map(f=>`<div class="ln" style="cursor:default"><span><bdi dir="ltr">${esc(f.name)}</bdi><small class="mu">${(f.size/1048576).toFixed(1)} MB · ${new Date(f.mtime).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})}</small></span><button onclick="elRestore('${esc(f.name)}')">استرجاع</button></div>`).join('')||'<small class="mu">لسه مفيش نسخ</small>'}<div class="row"><button onclick="elPick()">استرجاع من ملف تاني…</button></div></div></div>`}
+  <div style="margin-top:10px"><b>النسخ المحفوظة:</b>${L.slice(0,10).map(f=>`<div class="ln" style="cursor:default"><span><bdi dir="ltr">${esc(f.name)}</bdi><small class="mu">${(f.size/1048576).toFixed(1)} MB · ${new Date(f.mtime).toLocaleString('ar-EG',{timeZone:'Africa/Cairo'})}</small></span><button onclick="elRestore('${esc(f.name)}')">استرجاع</button></div>`).join('')||'<small class="mu">لسه مفيش نسخ</small>'}<div class="row"><button onclick="elPick()">استرجاع من ملف تاني…</button></div></div><div id="upd"></div></div>`;try{UPD=await A.updateStatus()}catch(x){}updUI()}
 async function elChoose(){const r=await shopAPI.chooseBackupDir();if(r&&r.ok){await bkAuto(true);toast('اتغيّر فولدر النسخ ✔','ok',2500)}elUI($('#bkd'))}
 async function elCfg(o){await shopAPI.setConfig(o);toast('اتحفظ ✔','ok',1200)}
 function elTestPrint(){showRcpt('<h2>طباعة تجريبية</h2><div class="c">MB Store</div><div class="c"><bdi dir="ltr">'+fmtD(today())+' '+hm(Date.now())+'</bdi></div><hr><div class="it"><div class="in">صنف تجريبي</div><div class="iv"><bdi dir="ltr">1 × 100</bdi><b><bdi dir="ltr">100</bdi></b></div></div><hr><div class="c">شكراً لزيارتكم</div>');setTimeout(doPrint,250)}
@@ -1081,7 +1106,7 @@ function stopCam(){clearInterval(ct);cs?.getTracks().forEach(t=>t.stop());cs=nul
 $('#cam').addEventListener('close',stopCam);
 (async()=>{
   if(!await lockTab()){$('#nav').innerHTML='';$('#v').innerHTML='<div class="card" style="max-width:420px;margin:40px auto"><h3>⚠️ السيستم مفتوح في نافذة تانية</h3><p>عشان البيانات ماتتخربش، السيستم بيشتغل في نافذة واحدة بس على الجهاز. اقفل النافذة أو التبويب التاني وارجع هنا.</p><button class="pri" onclick="location.reload()">حدّث</button></div>';return}
-  const v=await load();if(v)S=v;S.u=S.u||[];S.log=S.log||[];if(!DB)alert('التخزين على الجهاز غير متاح، البيانات مش هتتحفظ');seed();migrate();pruneLog();if(S.st&&S.st.n==='اسم المحل')S.st.n='MB';save();navigator.storage?.persist?.();
+  const v=await load();if(v)S=v;if((S.dv||0)>DATA_VER){SAVE_LOCK=true;setTimeout(()=>alert('البيانات دي اتحفظت بنسخة أحدث من البرنامج. حدّث البرنامج الأول. الحفظ متوقف عشان بياناتك ما تتأثرش.'),600)}else S.dv=DATA_VER;S.u=S.u||[];S.log=S.log||[];if(!DB)alert('التخزين على الجهاز غير متاح، البيانات مش هتتحفظ');seed();migrate();pruneLog();if(S.st&&S.st.n==='اسم المحل')S.st.n='MB';save();navigator.storage?.persist?.();
   try{const L=await snapMetas();if(!L.length||cairo(L[0].id)!==today())await snap('تلقائي يومي')}catch(e){}
   render()})();
 </script></body></html>

@@ -102,6 +102,70 @@ ipcMain.handle('chooseBackupDir', async () => {
 });
 ipcMain.handle('openBackupDir', () => shell.openPath(backupDir()));
 
+/* ---------- safety copy before an update ---------- */
+const PU_RE = /^MB-pre-update-.*\.json$/;
+ipcMain.handle('savePreUpdate', (_e, text, ver) => {
+  try {
+    if (typeof text !== 'string' || text.length < 20 || text.length > 400e6) return { ok: false, reason: 'بيانات غير صالحة' };
+    const v = validate(text); if (!v.ok) return v;
+    const safe = (s) => String(s || '').replace(/[^0-9A-Za-z._-]/g, '').slice(0, 20) || 'x';
+    const dir = backupDir(), name = 'MB-pre-update-' + safe(app.getVersion()) + '-to-' + safe(ver) + '-' + dayKey() + '.json';
+    writeAtomic(path.join(dir, name), text);
+    const olds = fs.readdirSync(dir).filter((n) => PU_RE.test(n)).map((n) => ({ n, t: fs.statSync(path.join(dir, n)).mtimeMs })).sort((a, b) => a.t - b.t);
+    for (const o of olds.slice(0, -5)) { try { fs.unlinkSync(path.join(dir, o.n)); } catch (_) {} }   // keep the last 5 safety copies
+    return { ok: true, name, summary: v.summary };
+  } catch (e) { log('savePreUpdate', e && e.stack || e); return { ok: false, reason: String(e && e.message || e) }; }
+});
+
+/* ---------- updates (GitHub Releases through electron-updater) ---------- */
+// The shop data lives in %APPDATA%\MB Store, completely outside the program folder, so installing
+// a new version only replaces program files. The page makes a safety copy before any update.
+const upd = { state: 'idle', version: '', percent: 0, error: '', notes: '' };
+let autoUpdater = null;
+const updInfo = () => ({ ...upd, current: app.getVersion() });
+function sendUpd() { try { if (win && !win.isDestroyed()) win.webContents.send('update-state', updInfo()); } catch (_) {} }
+function checkUpdate() {
+  if (!autoUpdater || upd.state === 'downloading' || upd.state === 'ready') return Promise.resolve({ ok: false, reason: upd.state });   // 'available' is re-checked: the reminder stays until the update is installed
+  return autoUpdater.checkForUpdates().then(() => ({ ok: true }), (e) => { log('updater check failed', e && e.message || e); return { ok: false, reason: String(e && e.message || e) }; });
+}
+function setupUpdater() {
+  if (E2E && !process.env.MB_UPDATE_TEST) { upd.state = 'disabled'; return; }
+  const yml = path.join(process.resourcesPath || '', 'app-update.yml');
+  if (!app.isPackaged || !fs.existsSync(yml)) { upd.state = 'unsupported'; log('updater off: not an installer build (no app-update.yml)'); return; }
+  try { autoUpdater = require('electron-updater').autoUpdater; } catch (e) { upd.state = 'unsupported'; log('electron-updater missing', e && e.message); return; }
+  autoUpdater.logger = { info: (m) => log('updater', m), warn: (m) => log('updater warn', m), error: (m) => log('updater error', m), debug() {} };
+  autoUpdater.autoDownload = false;          // never download behind the user's back: ask first (download now / later)
+  autoUpdater.autoInstallOnAppQuit = true;   // the update is installed when the shop closes the program: never in the middle of a sale
+  autoUpdater.allowDowngrade = false;
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.on('checking-for-update', () => { upd.state = 'checking'; sendUpd(); });
+  autoUpdater.on('update-available', (i) => {
+    let n = i.releaseNotes; if (Array.isArray(n)) n = n.map((x) => x && x.note || '').join('\n');
+    upd.notes = String(n || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (upd.state !== 'downloading' && upd.state !== 'ready') { upd.state = 'available'; upd.version = i.version; upd.percent = 0; }
+    sendUpd();
+  });
+  autoUpdater.on('update-not-available', () => { upd.state = 'uptodate'; sendUpd(); });
+  autoUpdater.on('download-progress', (p) => { upd.percent = Math.round(p.percent || 0); sendUpd(); });
+  autoUpdater.on('update-downloaded', (i) => { upd.state = 'ready'; upd.version = i.version; sendUpd(); });
+  autoUpdater.on('error', (e) => { if (upd.state !== 'ready') upd.state = 'error'; upd.error = String(e && e.message || e).slice(0, 200); log('updater error', e && e.stack || e); sendUpd(); });
+  setTimeout(checkUpdate, 20000);
+  setInterval(checkUpdate, 6 * 3600 * 1000);
+}
+ipcMain.handle('updateStatus', () => updInfo());
+ipcMain.handle('updateCheck', () => checkUpdate());
+ipcMain.handle('updateDownload', () => {
+  if (!autoUpdater || upd.state !== 'available') return { ok: false, reason: upd.state };
+  upd.state = 'downloading'; upd.percent = 0; sendUpd();
+  autoUpdater.downloadUpdate().catch((e) => { log('download failed', e && e.message || e); });   // failures arrive through the 'error' event
+  return { ok: true };
+});
+ipcMain.handle('updateInstall', () => {
+  if (!autoUpdater || upd.state !== 'ready') return { ok: false, reason: upd.state };
+  setImmediate(() => { try { autoUpdater.quitAndInstall(false, true); } catch (e) { log('quitAndInstall', e && e.stack || e); } });
+  return { ok: true };
+});
+
 /* ---------- printing ---------- */
 ipcMain.handle('info', () => ({ version: app.getVersion(), backupDir: backupDir(), printer: cfg.printer, paper: cfg.paper, userData: USER }));
 ipcMain.handle('setConfig', (_e, o) => {
@@ -177,6 +241,7 @@ if (!app.requestSingleInstanceLock()) {
     });
     session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(['media', 'clipboard-sanitized-write', 'fullscreen'].includes(perm)));
     createWindow();
+    setupUpdater();
     log('started v' + app.getVersion());
     if (E2E) { win.webContents.once('did-finish-load', () => require('./test/e2e-driver.js')(win, { E2E, USER, backupDir, cfg: () => cfg })); }
   });
