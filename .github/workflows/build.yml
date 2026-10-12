@@ -1,4 +1,6 @@
 name: Release Windows installer
+# Push a tag like v1.0.1 (same number as "version" in package.json) and this builds the installer
+# and publishes a GitHub Release with MB-Store-Setup-x.y.z.exe + latest.yml (what the app checks for updates).
 on:
   push:
     tags: ['v*']
