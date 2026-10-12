@@ -159,7 +159,7 @@ function render(){
   if(!T[tab])tab=Object.keys(T)[0]||'';
   if(!tab){$('#nav').innerHTML='<button onclick="logout()">خروج ('+esc(me.name)+')</button>';$('#v').innerHTML='<div class="card">مفيش شاشات متاحة للحساب ده. كلّم المالك يفعّل لك صلاحيات.</div>';return}
   const bn=own&&(!S.lb||Date.now()-S.lb>864e5)?`<div class="card warn">⚠️ مفيش نسخة احتياطية من فترة <button onclick="go('set')">خد نسخة</button></div>`:'';
-  $('#nav').innerHTML=Object.entries(T).map(([k,v],ni)=>`<button class="${k==tab?'on':''}" title="Alt+${(ni+1)%10}" onclick="go('${k}')">${v}${bdg(k)}</button>`).join('')+`<button onclick="kbHelp()" title="الاختصارات واختبار السكانر">⌨️</button><button onclick="toggleSnd()" title="الصوت">${S.mute?'🔇':'🔔'}</button><button onclick="logout()">خروج (${esc(me.name)})</button>`;
+  $('#nav').innerHTML=Object.entries(T).map(([k,v],ni)=>`<button class="${k==tab?'on':''}" title="Alt+${(ni+1)%10}" onclick="go('${k}')">${v}${bdg(k)}</button>`).join('')+`<button onclick="kbHelp()" title="الاختصارات واختبار السكانر">⌨️</button><button onclick="toggleSnd()" title="الصوت">${S.mute?'🔇':'🔔'}</button><button onclick="changeMyPw()" title="تغيير كلمة السر بتاعتي">🔑</button><button onclick="logout()">خروج (${esc(me.name)})</button>`;
   $('#v').innerHTML=bn+dueBn()+({pos:vPos,cr:vCr,inv:vInv,ret:vRet,exp:vExp,sup:vSup,prod:vProd,rep:vRep,trash:vTrash,set:vSet})[tab]();
 }
 function ask(title,fields,cb){
@@ -232,6 +232,14 @@ const cat=i=>S.c.find(x=>x.id==i);
 const tname=i=>{const t=cat(i);if(!t)return 'غير مصنف';const g=cat(t.pid);return(g?g.name+' › ':'')+t.name};
 const defs=i=>S.a.filter(a=>a.cid==i);
 const typeOpts=()=>S.c.filter(t=>t.pid).map(t=>[t.id,tname(t.id)]);
+const TYPE_AR={'Creatine':'كرياتين','Pre-Workout':'بري ورك اوت','Amino Acids':'أحماض أمينية','Whey Protein':'واي بروتين','Mass Gainer':'ماس جينر','Vitamins':'فيتامينات','Shaker & Gear':'شيكر واكسسوارات','Performance':'أداء رياضي','Protein & Mass':'بروتين وماس','Health':'صحة','Accessories':'اكسسوارات'};
+const tdisp=t=>t?(TYPE_AR[t.name]||t.name):'غير مصنف',tkey=s=>norm(s).replace(/^ال(?=.{2,})/,'');
+const findType=txt=>{const k=tkey(txt);return k?S.c.find(t=>t.pid&&(tkey(t.name)===k||tkey(TYPE_AR[t.name]||'')===k)):undefined};
+function ensureType(txt){let t=findType(txt);if(t)return t;let g=S.c.find(x=>!x.pid&&x.name==='أنواع أخرى');if(!g){g={id:id(),name:'أنواع أخرى'};S.c.push(g)}
+  t={id:id(),name:String(txt).trim(),pid:g.id};S.c.push(t);TYC.clear();return t}
+const TYC=new Map(),tyTxt=cid=>{let v=TYC.get(cid);if(v===undefined){const t=cat(cid),g=t&&cat(t.pid);v=norm([t&&t.name,t&&TYPE_AR[t.name],g&&g.name,g&&TYPE_AR[g.name]].filter(Boolean).join(' '));TYC.set(cid,v)}return v};
+const hit2=(p,w)=>{const h=hayC(p)+' '+tyTxt(p.cid);for(const x of w)if(!h.includes(x))return false;return true};
+const qwA=t=>qw(t).map(x=>x.length>=5&&x.startsWith('ال')?x.slice(2):x);
 const attrTxt=p=>defs(p.cid).filter(a=>p.at&&p.at[a.key]!==undefined).map(a=>a.label+': '+p.at[a.key]+(a.unit?' '+a.unit:'')).join(' · ');
 let pf=0;
 function addType(){if(!can('a_prodedit'))return deny();
@@ -282,14 +290,14 @@ function importReal(){
 }
 function vProd(){
   if(qpm&&can('a_bulk'))return vQp();
-  const w=qw(prq),L=sorted().filter(p=>(!pf||p.cid==pf)&&hit(p,w)),PS=50,np=Math.max(1,Math.ceil(L.length/PS));if(prg>=np)prg=np-1;if(prg<0)prg=0;const V=L.slice(prg*PS,prg*PS+PS);
+  TYC.clear();let lt=-1;const w=qwA(prq),L=sorted().filter(p=>(!pf||p.cid==pf)&&hit2(p,w)).sort((a,b)=>CO.compare(tdisp(cat(a.cid)),tdisp(cat(b.cid)))),tcnt={},nInc=act().filter(p=>{tcnt[p.cid]=(tcnt[p.cid]||0)+1;return !(p.price>0)||!p.bc}).length,PS=50,np=Math.max(1,Math.ceil(L.length/PS));if(prg>=np)prg=np-1;if(prg<0)prg=0;const V=L.slice(prg*PS,prg*PS+PS);
   const pager=`<div class="row" style="align-items:center"><button onclick="prg=Math.max(0,prg-1);render()" ${prg?'':'disabled'}>◀ السابق</button><span class="mu" style="text-align:center">صفحة ${prg+1} / ${np} · ${L.length} منتج</span><button onclick="prg=Math.min(${np-1},prg+1);render()" ${prg<np-1?'':'disabled'}>التالي ▶</button></div>`;
-  return `<div class="card"><div class="row">${can('a_prodedit')?`<button class="pri" onclick="addProd()">+ منتج</button><button onclick="addType()">+ نوع جديد</button>`:''}${can('a_bulk')?`<button onclick="exportProdCsv()">⬇️ تصدير CSV</button><label class="btnl">⬆️ استيراد CSV<input type="file" accept=".csv,text/csv,.txt" hidden onchange="importCsv(this.files[0]);this.value=''"></label>`:''}${can('a_bulk')?`<button onclick="qpm=true;render()">💲 تسعير سريع</button>`:''}</div>
-  <label>بحث (اسم / ماركة / باركود)<input id="prq" value="${esc(prq)}" oninput="sprq(this.value)" onkeydown="if(event.key=='Enter')prqEnter()"></label><label>النوع<select onchange="pf=+this.value||0;prg=0;render()"><option value="">كل الأنواع</option>${typeOpts().map(([i,n])=>`<option value="${i}" ${i==pf?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
+  return `<div class="card"><div class="row">${can('a_prodedit')?`<button class="pri" onclick="addProd()">+ منتج</button><button onclick="addType()">+ نوع جديد</button>`:''}${can('a_bulk')?`<button onclick="exportProdCsv()">⬇️ تصدير CSV</button><label class="btnl">⬆️ استيراد CSV<input type="file" accept=".csv,text/csv,.txt" hidden onchange="importCsv(this.files[0]);this.value=''"></label>`:''}${can('a_bulk')?`<button class="${nInc?'pri':''}" onclick="qpm=true;render()">✅ استكمال البيانات${nInc?' ('+nInc+')':''}</button>`:''}</div>
+  <label>بحث (اسم / نوع مثل كرياتين / ماركة / باركود)<input id="prq" value="${esc(prq)}" oninput="sprq(this.value)" onkeydown="if(event.key=='Enter')prqEnter()"></label><div class="row">${[[0,'كل الأنواع',act().length],...S.c.filter(x=>x.pid&&tcnt[x.id]).sort((a,b)=>CO.compare(tdisp(a),tdisp(b))).map(x=>[x.id,tdisp(x),tcnt[x.id]])].map(([i,n,c])=>`<button class="${i==pf?'pri':''}" onclick="pf=${i};prg=0;render()">${esc(n)} (${c})</button>`).join('')}</div>
   <small class="mu">سكانر USB/بلوتوث شغال مباشرة: امسح منتج موجود = إضافة مخزون، وغير موجود = فورم منتج جديد بالباركود.</small></div>
   <div class="card w"><table><tr><th>المنتج</th><th>السعر</th><th>المخزون</th><th>أقرب انتهاء</th><th></th></tr>
-  ${V.map(p=>{const s=stock(p.id),ex=nextExp(p.id);
-  return `<tr><td>${nm(p)}<small class="mu">${esc(tname(p.cid))} · ${esc(p.br||'')} ${esc(p.bc||'')}</small><small class="mu">${esc(attrTxt(p))}</small></td><td>${promo(p)?`<s>${money(p.price)}</s> `:''}${money(price(p))}</td><td class="${s<=p.min?'bad':''}">${s}</td><td>${ex||'—'}</td>
+  ${V.map(p=>{const s=stock(p.id),ex=nextExp(p.id),hd=p.cid!==lt?(lt=p.cid,`<tr><td colspan="5" style="background:var(--bg)"><b>${esc(tdisp(cat(p.cid)))}</b> <small class="mu">(${tcnt[p.cid]||0} منتج)</small></td></tr>`):'',tg=(!(p.price>0)?' <b class="bad">بدون سعر</b>':'')+(!p.bc?' <b class="warn">بدون باركود</b>':'');
+  return hd+`<tr><td>${nm(p)}${tg}<small class="mu">${esc(p.br||'')} ${esc(p.bc||'')}</small><small class="mu">${esc(attrTxt(p))}</small></td><td>${promo(p)?`<s>${money(p.price)}</s> `:''}${money(price(p))}</td><td class="${s<=p.min?'bad':''}">${s}</td><td>${ex||'—'}</td>
   <td>${can('a_price')?`<button onclick="editPrice(${p.id})">سعر</button> <button onclick="setDisc(${p.id})">خصم</button> `:''}${can('a_prodedit')?`<button onclick="editProd(${p.id})">تعديل</button> `:''}${can('a_stock')?`<button onclick="adjStock(${p.id},'add')">+ مخزون</button> <button onclick="adjStock(${p.id},'sub')">− سحب</button> <button onclick="fixStock(${p.id})">✏️ تصحيح</button> `:''}${can('a_prodedit')?`<button class="bad" onclick="delProd(${p.id})">حذف</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="5" class="mu">لا منتجات</td></tr>'}</table>${pager}</div>`;
 }
 let prq='',prg=0;
@@ -385,16 +393,38 @@ const can=k=>!!me&&(me.role=='owner'||(me.perm||PERM_CASHIER).includes(k));
 const deny=()=>{try{beep('err')}catch(e){}alert('مفيش عندك صلاحية للعملية دي. كلّم المالك.')};
 const permSum=u=>(u.perm||PERM_CASHIER).length+' من '+PERM_ALL.length+' صلاحية';
 let fails=0,lock=0;
-function vLogin(){const f=!S.u.length;return `<div class="card" style="max-width:360px;margin:40px auto"><div class="c" style="text-align:center"><img src="${LOGO}" alt="MB" style="width:110px;height:110px;border-radius:50%"></div><h3 style="text-align:center">${f?'إعداد أول مرة — حساب المالك':'تسجيل الدخول'}</h3>${f?'<label>الاسم<input id="ln"></label>':''}<label>اسم المستخدم<input id="lu" autocomplete="username"></label><label>كلمة السر<input id="lp" type="password" onkeydown="if(event.key=='Enter')login()"></label><button class="pri" style="width:100%" onclick="login()">${f?'إنشاء':'دخول'}</button></div>`}
+function vLogin(){const f=!S.u.length;return `<div class="card" style="max-width:360px;margin:40px auto"><div class="c" style="text-align:center"><img src="${LOGO}" alt="MB" style="width:110px;height:110px;border-radius:50%"></div><h3 style="text-align:center">${f?'إعداد أول مرة — حساب المالك':'تسجيل الدخول'}</h3>${f?'<label>الاسم<input id="ln"></label>':''}<label>اسم المستخدم<input id="lu" autocomplete="username"></label><label>كلمة السر<input id="lp" type="password" onkeydown="if(event.key=='Enter')login()"></label><button class="pri" style="width:100%" onclick="login()">${f?'إنشاء':'دخول'}</button>${f?'':'<p style="text-align:center;margin:12px 0 0"><a href="#" onclick="forgotDlg();return false" style="color:var(--br)">نسيت كلمة السر أو اسم المستخدم؟</a></p>'}</div>`}
 async function login(){
   if(Date.now()<lock)return alert('حاول بعد شوية');
   const u=$('#lu').value.trim().toLowerCase(),pw=$('#lp').value;
   if(!u||pw.length<4)return alert('اكتب اسم المستخدم وكلمة سر (4 أحرف على الأقل)');
-  if(!S.u.length){const s=salt8();S.u.push({id:id(),name:$('#ln').value.trim()||u,user:u,salt:s,hash:await hp(pw,s),role:'owner'});me=S.u[0];logit('إنشاء حساب المالك');save();return render()}
-  const x=S.u.find(y=>y.user==u);
-  if(x&&await hp(pw,x.salt)===x.hash){fails=0;me=x;lastAct=Date.now();pruneLog();logit('دخول');save();render()}
+  if(!S.u.length){const s=salt8();S.u.push({id:id(),name:$('#ln').value.trim()||u,user:u,salt:s,hash:await hp(pw,s),role:'owner'});me=S.u[0];logit('إنشاء حساب المالك');const k0=await rkMake();render();return rkShow(k0)}
+  const raw=norm($('#lu').value),byName=S.u.filter(y=>norm(y.name)===raw),x=S.u.find(y=>y.user==u)||(byName.length==1?byName[0]:null);   // the user name OR the display name (when it is unique) logs in
+  if(x&&await hp(pw,x.salt)===x.hash){fails=0;me=x;lastAct=Date.now();pruneLog();logit('دخول');save();render();if(x.role=='owner'&&!S.rk)setTimeout(rkPrompt,600)}
   else{if(++fails>=5){lock=Date.now()+3e4;fails=0}alert('بيانات غير صحيحة')}
 }
+/* ---------- recovery key + password tools ---------- */
+const RK_AL='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const rkNorm=t=>String(t||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const rkGen=()=>{const b=crypto.getRandomValues(new Uint8Array(20));let s='';for(const x of b)s+=RK_AL[x%32];return s.match(/.{4}/g).join('-')};
+async function rkMake(){const k=rkGen(),s=salt8();S.rk={s,h:await hp(rkNorm(k),s),t:new Date().toISOString(),l4:rkNorm(k).slice(-4)};logit('إنشاء مفتاح استرجاع');save();return k}
+async function rkVerify(k){k=rkNorm(k);return !!S.rk&&k.length===20&&await hp(k,S.rk.s)===S.rk.h}
+function rkShow(k,after){const d=$('#dlg');if(d.open)d.close();
+  d.innerHTML=`<div><h3>🔑 مفتاح الاسترجاع</h3><p>ده المفتاح اللي هيفتح لك الحساب لو نسيت كلمة السر. <b>بيظهر مرة واحدة بس</b>. احفظه في مكان آمن (ورقة، أو رسالة لنفسك على واتساب) وماتديهوش لحد.</p><div dir="ltr" style="font:700 1.35em/1.6 monospace;text-align:center;letter-spacing:2px;background:var(--cd);border:1px dashed var(--bd);border-radius:10px;padding:12px;user-select:all">${esc(k)}</div><div class="row" style="margin-top:8px"><button type="button" onclick="navigator.clipboard&&navigator.clipboard.writeText('${k}').then(()=>toast('اتنسخ','ok',1500))">📋 نسخ</button><button type="button" onclick="dlFile('MB-recovery-key.txt','MB Store recovery key\r\n${k}\r\n','text/plain')">💾 حفظ كملف</button></div><label style="display:flex;gap:8px;align-items:center;color:var(--tx);margin-top:10px"><input type="checkbox" id="rkok" style="width:auto;margin:0" onchange="document.getElementById('rkdone').disabled=!this.checked"> أنا حفظت المفتاح</label><div class="row" style="margin-top:8px"><button type="button" class="pri" id="rkdone" disabled onclick="document.getElementById('dlg').close()">تمام</button></div></div>`;
+  d.onkeydown=null;d.oncancel=e=>e.preventDefault();d.onclose=()=>{d.oncancel=null;d.onclose=null;if(after)after()};d.showModal()}
+function rkPrompt(){if(!me||me.role!='owner'||S.rk)return;if(confirm('حسابك مفيهوش مفتاح استرجاع. لو نسيت كلمة السر مش هتقدر تدخل. تعمل المفتاح دلوقتي؟'))rkMake().then(k=>rkShow(k,()=>render()))}
+function rkRegen(){if(me.role!='owner')return deny();ask('🔑 مفتاح استرجاع جديد (القديم هيتلغي)',[{k:'p',l:'كلمة السر بتاعتك للتأكيد',t:'password',r:1}],async o=>{if(await hp(o.p,me.salt)!==me.hash)return alert('كلمة السر غلط');const k=await rkMake();rkShow(k,()=>render())})}
+function changeMyPw(){if(!me)return;ask('🔐 تغيير كلمة السر بتاعتي',[{k:'o',l:'كلمة السر الحالية',t:'password',r:1},{k:'n',l:'كلمة السر الجديدة (4 أحرف على الأقل)',t:'password',r:1},{k:'n2',l:'أكّد الجديدة',t:'password',r:1}],async o=>{
+  if(await hp(o.o,me.salt)!==me.hash)return alert('كلمة السر الحالية غلط');if(o.n.length<4)return alert('الجديدة قصيرة');if(o.n!==o.n2)return alert('الكلمتين الجداد مش متطابقتين');
+  me.salt=salt8();me.hash=await hp(o.n,me.salt);logit('تغيير كلمة السر');save();toast('✅ اتغيّرت كلمة السر','ok',3000)})}
+let rkFails=0,rkLock=0;
+function forgotDlg(){const d=$('#dlg');if(d.open)d.close();d.innerHTML=`<div><h3>🔐 نسيت كلمة السر أو اسم المستخدم؟</h3><p class="mu">اكتب مفتاح الاسترجاع (اللي ظهر لك لما عملت الحساب). بعدها هتشوف اسم المستخدم وتختار كلمة سر جديدة.</p><label>مفتاح الاسترجاع<input id="fk" dir="ltr" autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" onkeydown="if(event.key=='Enter')forgotCheck()"></label><div class="row"><button type="button" class="pri" onclick="forgotCheck()">تحقق</button><button type="button" onclick="document.getElementById('dlg').close()">إلغاء</button></div><small class="mu">ما عندكش المفتاح؟ كلّم اللي ركّب لك البرنامج.</small></div>`;d.onclose=null;d.onkeydown=null;d.showModal()}
+async function forgotCheck(){if(Date.now()<rkLock)return alert('محاولات غلط كتير. حاول بعد '+Math.ceil((rkLock-Date.now())/60000)+' دقيقة');
+  if(!(await rkVerify($('#fk').value))){if(++rkFails>=5){rkLock=Date.now()+5*60e3;rkFails=0}return alert('المفتاح غير صحيح')}
+  rkFails=0;const O=S.u.filter(y=>y.role=='owner'),d=$('#dlg');
+  d.innerHTML=`<div><h3>✅ المفتاح صحيح</h3><p class="mu">دي حسابات المالك المسجلة. اختار الحساب وحط كلمة سر جديدة:</p>${O.map((y,i)=>`<label style="display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="radio" name="fu" value="${y.id}" ${i?'':'checked'} style="width:auto;margin:0"> ${esc(y.name)} <b dir="ltr">(${esc(y.user)})</b></label>`).join('')}<label>كلمة السر الجديدة<input id="fp1" type="password" autocomplete="new-password"></label><label>أكّدها<input id="fp2" type="password" autocomplete="new-password" onkeydown="if(event.key=='Enter')forgotDo()"></label><div class="row"><button type="button" class="pri" onclick="forgotDo()">غيّر وادخل</button><button type="button" onclick="document.getElementById('dlg').close()">إلغاء</button></div></div>`}
+async function forgotDo(){const r=document.querySelector('input[name=fu]:checked'),p1=$('#fp1').value,p2=$('#fp2').value;if(!r)return;if(p1.length<4)return alert('كلمة السر 4 أحرف على الأقل');if(p1!==p2)return alert('الكلمتين مش متطابقتين');
+  const x=S.u.find(y=>y.id==r.value);if(!x)return;x.salt=salt8();x.hash=await hp(p1,x.salt);me=x;lastAct=Date.now();logit('استرجاع كلمة السر بمفتاح الاسترجاع',x.user);const nk=await rkMake();$('#dlg').close();render();rkShow(nk,()=>render())}
 function logout(){me=null;cart=[];render()}
 ['click','keydown'].forEach(e=>addEventListener(e,()=>lastAct=Date.now()));
 setInterval(()=>{if(me&&Date.now()-lastAct>15*6e4){me=null;cart=[];render()}},3e4);
@@ -481,7 +511,7 @@ function vSet(){setTimeout(()=>{snapUI();pstUI();bkUI()},0);
 <div id="bkd" class="mu" style="margin:8px 0"></div>
 <div class="kb">لحماية بياناتك: (١) فعّل النسخ التلقائي لفولدر على الكمبيوتر، (٢) ابعت نسخة لنفسك على واتساب أو Drive مرة يوميًا، (٣) على الموبايل ضيف السيستم للشاشة الرئيسية (iPhone: مشاركة ← Add to Home Screen) وماتمسحش بيانات المتصفح.</div>
 <label style="margin-top:8px">استرجاع من ملف<input type="file" accept=".json" onchange="restore(this.files[0])"></label><label>أو الصق نص النسخة هنا<textarea id="rt" style="width:100%;height:70px"></textarea></label><div class="row"><button onclick="restoreText($('#rt').value)">استرجاع من النص</button><button onclick="backupText()">نسخ كنص</button><button onclick="exportXlsx()">⬇️ تصدير كل البيانات (Excel)</button></div></div>
-  <details class="card w"><summary style="cursor:pointer;font-weight:700">🛟 نقاط الاستعادة (الرجوع لحالة سابقة)</summary><p class="mu"><b>إيه دي؟</b> لقطات كاملة من بياناتك محفوظة جوه المتصفح. بتتعمل تلقائيًا: بعد أي تغيير (مرة كل 5 دقايق في الشغل)، وقبل العمليات الخطرة (إلغاء فاتورة، حذف منتج، مسح نهائي، استيراد، استرجاع)، وكل يوم.<br><b>تستخدمها إمتى؟</b> لما تعمل غلط وتحب ترجع: مسحت منتجات بالغلط، استيراد CSV بوّظ الأسعار، إلغاء فاتورة غلط، أو البيانات بقت متلخبطة. اختار اللقطة اللي قبل الغلط بالوقت ودوس "استرجاع" (بيتعمل لقطة للحالة الحالية الأول فتقدر ترجع تاني).<br><b>حدودها:</b> بتحتفظ بآخر 24 لقطة + لقطة لكل يوم من آخر 14 يوم. وبتضيع لو الجهاز اتعطل أو اتمسحت بيانات المتصفح، فالملف الخارجي (الفولدر التلقائي / واتساب / Drive) هو الأمان الحقيقي.</p><div id="snl" class="mu">...</div><button onclick="snapNow()">+ لقطة الآن</button></details>${me.role=='owner'?`<div class="card w"><h3>👤 المستخدمين</h3><table>${S.u.map(x=>`<tr><td>${esc(x.name)}<small class="mu">${esc(x.user)}</small></td><td>${x.role=='owner'?'مالك (كل شيء)':permSum(x)}</td><td><button onclick="editUser(${x.id})">صلاحيات</button> <button onclick="resetPw(${x.id})">باسورد</button> ${x.id!=me.id?`<button class="bad" onclick="delUser(${x.id})">حذف</button>`:''}</td></tr>`).join('')}</table><button onclick="addUser()">+ مستخدم</button></div>`:''}
+  <details class="card w"><summary style="cursor:pointer;font-weight:700">🛟 نقاط الاستعادة (الرجوع لحالة سابقة)</summary><p class="mu"><b>إيه دي؟</b> لقطات كاملة من بياناتك محفوظة جوه المتصفح. بتتعمل تلقائيًا: بعد أي تغيير (مرة كل 5 دقايق في الشغل)، وقبل العمليات الخطرة (إلغاء فاتورة، حذف منتج، مسح نهائي، استيراد، استرجاع)، وكل يوم.<br><b>تستخدمها إمتى؟</b> لما تعمل غلط وتحب ترجع: مسحت منتجات بالغلط، استيراد CSV بوّظ الأسعار، إلغاء فاتورة غلط، أو البيانات بقت متلخبطة. اختار اللقطة اللي قبل الغلط بالوقت ودوس "استرجاع" (بيتعمل لقطة للحالة الحالية الأول فتقدر ترجع تاني).<br><b>حدودها:</b> بتحتفظ بآخر 24 لقطة + لقطة لكل يوم من آخر 14 يوم. وبتضيع لو الجهاز اتعطل أو اتمسحت بيانات المتصفح، فالملف الخارجي (الفولدر التلقائي / واتساب / Drive) هو الأمان الحقيقي.</p><div id="snl" class="mu">...</div><button onclick="snapNow()">+ لقطة الآن</button></details>${me.role=='owner'?`<div class="card"><h3>🔐 الأمان واسترجاع كلمة السر</h3><p>${S.rk?'✅ مفتاح الاسترجاع موجود (آخره <b dir="ltr">…'+esc(S.rk.l4)+'</b>)، اتعمل '+new Date(S.rk.t).toLocaleDateString('ar-EG',{timeZone:'Africa/Cairo'}):'⚠️ مفيش مفتاح استرجاع. اعمل واحد دلوقتي، عشان لو نسيت كلمة السر ما تتقفلش بره السيستم.'}</p><div class="row"><button class="pri" onclick="rkRegen()">${S.rk?'🔑 عمل مفتاح جديد (القديم بيتلغي)':'🔑 اعمل مفتاح استرجاع'}</button><button onclick="changeMyPw()">🔐 غيّر كلمة السر بتاعتي</button></div><small class="mu">لو نسيت كلمة السر، من شاشة الدخول: "نسيت كلمة السر" واكتب المفتاح. ولو نسيت كلمة سر موظف، من "المستخدمين" دوس "باسورد".</small></div>`:''}${me.role=='owner'?`<div class="card w"><h3>👤 المستخدمين</h3><table>${S.u.map(x=>`<tr><td>${esc(x.name)}<small class="mu">${esc(x.user)}</small></td><td>${x.role=='owner'?'مالك (كل شيء)':permSum(x)}</td><td><button onclick="editUser(${x.id})">صلاحيات</button> <button onclick="resetPw(${x.id})">باسورد</button> ${x.id!=me.id?`<button class="bad" onclick="delUser(${x.id})">حذف</button>`:''}</td></tr>`).join('')}</table><button onclick="addUser()">+ مستخدم</button></div>`:''}
   ${logCard()}`}
 /* ---------- Invoices, Returns, Receipts ---------- */
 const st=()=>S.st||{n:'MB',p:'',f:'شكراً لزيارتكم'},m=n=>(Math.round(n*100)/100).toLocaleString('en');
@@ -805,8 +835,8 @@ function supList(){const td=today();return SUP().map(s=>{const I=PI().filter(x=>
   return{...s,tot,paid:pd,owed:r2(tot-pd),od,last,nx,lastBuy,lp,n_:I.length}})}
 const supOwed=()=>supList().reduce((a,s)=>a+Math.max(0,s.owed),0);
 const lastCost=pid=>{const b=S.b.filter(x=>x.pid==pid).sort((a,b)=>b.id-a.id)[0];return b?b.c:0};
-function addSup(){ask('مورد جديد',[{k:'n',l:'اسم المورد',r:1},{k:'ph',l:'التليفون'}],o=>{const n=o.n.trim();if(SUP().some(s=>norm(s.n)==norm(n)))return alert('المورد موجود قبل كده');
-  const s={id:id(),n,ph:o.ph.trim()};SUP().push(s);ssel=s.id;if(pur&&!pur.sid)pur.sid=s.id;logit('مورد جديد',n);save();render()})}
+function addSup(){ask('مورد جديد',[{k:'n',l:'اسم المورد أو المكان',r:1},{k:'ph',l:'رقم التواصل'}],o=>{const n=o.n.trim();if(SUP().some(s=>norm(s.n)==norm(n)))return alert('المورد موجود قبل كده');
+  const s={id:id(),n,ph:o.ph.trim()};SUP().push(s);ssel=s.id;if(pur){if(!pur.sid)pur.sid=s.id}else sview=1;logit('مورد جديد',n);save();render()})}
 function spayAlloc(sid,amt,m,only,dt,note){let left=r2(amt);const alloc=[];
   for(const x of PI().filter(y=>y.sid==sid&&!y.void&&(!only||y.id==only)).sort((a,b)=>(a.due||a.d).localeCompare(b.due||b.d)||a.id-b.id)){
     const r=r2(owe(x));if(r<=0)continue;const q=Math.min(left,r);alloc.push({iid:x.id,amt:q});x.paid=r2(x.paid+q);left=r2(left-q);if(left<=0)break}
@@ -824,58 +854,69 @@ function voidPur(i){if(!can('a_voidfin'))return deny();snapPre('قبل إلغا�
   ask('إلغاء فاتورة شراء '+piRef(i)+' ('+money(x.tot)+')',[{k:'w',l:'سبب الإلغاء',r:1}],o=>{x.items.forEach(it=>{S.b.find(y=>y.id==it.bid).q-=it.q});
     x.void={t:new Date().toISOString(),by:me.name,w:o.w};logit('إلغاء فاتورة شراء',piRef(i)+' '+o.w);save();render()})}
 /* purchase draft */
-const purTot=()=>r2(pur.rows.reduce((a,r)=>a+(+r.q||0)*(+r.c||0),0));
-function newPur(sid){pur={sid:sid||ssel||0,d:today(),no:'',due:'',rows:[],paid:'',m:'كاش'};purq='';tab='sup';render();const e=$('#ps');if(e)e.focus()}
+const purTot=()=>r2(pur.rows.reduce((a,r)=>a+(+r.lt||0),0));
+function newPur(sid){pur={sid:sid||ssel||0,d:today(),no:'',due:'',rows:[],pp:'none',rest:'',m:'كاش',lt:''};tab='sup';render();const e=$('#pt');if(e)e.focus()}
 function purCancel(){if(pur.rows.length&&!confirm('إلغاء الفاتورة؟ الأصناف المضافة هتتمسح.'))return;pur=null;render()}
-function purSug(){const k=norm(purq);if(!k)return[];const ws=k.split(' ');return act().filter(p=>{const h=hay(p);return ws.every(w=>h.includes(w))}).slice(0,8)}
-const sugHtml=()=>purSug().map(p=>`<div class="ln" onclick="purAdd(${p.id},true)"><span>${nm(p)}</span><small class="mu">مخزون ${stock(p.id)}</small></div>`).join('');
-function purS(v){purq=v;$('#sg').innerHTML=sugHtml()}
-function purAdd(pid,fq){let i=pur.rows.findIndex(r=>r.pid==pid);if(i>=0)pur.rows[i].q=(+pur.rows[i].q||0)+1;else{pur.rows.unshift({pid,q:1,c:lastCost(pid),e:''});i=0}
-  purq='';render();const e=$(fq?'#pq'+i:'#ps');if(e){e.focus();e.select&&e.select()}}
-function purEnter(e){if(e.key!=='Enter')return;e.preventDefault();const v=purq.trim();if(!v)return;
-  const ex=act().find(p=>p.bc&&p.bc===v);if(ex){beep('ok');return purAdd(ex.id,false)}
-  const L=purSug();if(L.length==1)return purAdd(L[0].id,true);
-  if(!L.length){beep('err');if(confirm('المنتج مش موجود. تضيفه كمنتج جديد؟'))addProd(/^\d{5,}$/.test(v)?v:'')}}
-function purKey(e){if(e.key!=='Enter')return;e.preventDefault();const a=[...document.querySelectorAll('.pi')],i=a.indexOf(e.target),n=a[i+1]||$('#ps');n.focus();n.select&&n.select()}
-function purSet(i,k,v){const r=pur.rows[i];r[k]=k=='e'?v:(v===''?'':+v);const e=$('#pt'+i);if(e)e.textContent=m((+r.q||0)*(+r.c||0));purUpd()}
-function purUpd(){const e=$('#ptot');if(e)e.textContent=money(purTot());const s=$('#psum');if(s)s.innerHTML=purSumm();const p=$('#ppv');if(p)p.innerHTML=planPvHtml()}
+const findProdByName=n=>{const k=norm(n);return k?act().find(p=>norm(p.name)===k||norm(rn(p))===k):undefined};
+function purInfo(r){const p=findProdByName(r.n);if(p)return{p,t:cat(p.cid),isNew:false,newType:false};const t=findType(r.tn);return{p:null,t,isNew:true,newType:!t&&!!String(r.tn||'').trim()}}
+function purNote(){const e=$('#pnote');if(!e)return;const n=($('#pn')||{}).value||'',tn=($('#pt')||{}).value||'',q=+($('#pq')||{}).value,l=+($('#pl')||{}).value;if(!n.trim()){e.textContent='';return}
+  const f=purInfo({n,tn});let s=f.p?'✔ موجود تحت نوع «'+tdisp(f.t)+'» — هتتضاف له الكمية':f.t?'🆕 منتج جديد هيتضاف تحت نوع «'+tdisp(f.t)+'»':f.newType?'🆕 منتج جديد + نوع جديد «'+tn.trim()+'» (هيتعمل تحت مجموعة «أنواع أخرى»)':'⚠️ منتج جديد: اكتب نوعه';
+  if(q>0&&l>0)s+=' · سعر القطعة = '+money(l/q);e.textContent=s}
+function purNameCh(){const n=($('#pn')||{}).value,p=findProdByName(n),t=$('#pt');if(p&&t&&!t.value.trim()){t.value=tdisp(cat(p.cid));purNote()}}
+function purEnt(e,nx){if(e.key!=='Enter')return;e.preventDefault();if(nx==='add')return purAddLine();const n=$('#'+nx);if(n){n.focus();n.select&&n.select()}}
+function purPick(p){const a=$('#pn'),b=$('#pt');if(a)a.value=rn(p);if(b)b.value=tdisp(cat(p.cid));purNote();const q=$('#pq');if(q)q.focus()}
+function purAddLine(){const tn=$('#pt').value.trim(),n=$('#pn').value.trim().replace(/\s+/g,' '),q=+$('#pq').value,l=$('#pl').value;
+  if(!n)return alert('اكتب اسم المنتج');if(!(q>0))return alert('اكتب الكمية');if(l===''||!(+l>=0))return alert('اكتب إجمالي سعر الكمية دي (كلها بكام)');
+  const f=purInfo({n,tn});if(f.isNew&&!tn)return alert('المنتج ده جديد: اكتب نوعه (مثلًا كرياتين)');
+  pur.rows.push({tn:f.p?tdisp(f.t):tn,n:f.p?rn(f.p):n,q,lt:r2(+l)});pur.lt=tn;render();beep('ok');const e=$('#pn');if(e)e.focus()}
+function purSetRow(i,k,v){const r=pur.rows[i];r[k]=v===''?'':+v;const u=$('#pu'+i);if(u)u.textContent=(+r.q>0&&+r.lt>=0)?money(r.lt/r.q):'—';purUpd()}
 function purDel(i){pur.rows.splice(i,1);render()}
-function savePur(){const rows=pur.rows.filter(r=>+r.q>0);
-  if(!pur.sid)return alert('اختار المورد');if(!rows.length)return alert('أضف أصناف للفاتورة');
-  if(rows.some(r=>r.c===''||!(+r.c>=0)))return alert('تأكد من أسعار الشراء');
-  const tot=purTot(),pd=r2(pur.pp=='part'?+pur.paid||0:purPaid());if(pd<0||pd>tot+.005)return alert('المدفوع أكبر من إجمالي الفاتورة');
+function purUpd(){const e=$('#ptot');if(e)e.textContent=money(purTot());const s=$('#psum');if(s)s.innerHTML=purSumm();const p=$('#ppv');if(p)p.innerHTML=planPvHtml();const r=$('#prinfo');if(r)r.textContent='يعني دفعت '+money(purPaid())}
+function savePur(){
+  for(const r of pur.rows)if(r.pid&&r.lt===undefined&&r.c!==undefined){const p=P(r.pid);r.n=rn(p);r.tn=tdisp(cat(p.cid));r.lt=r2(+r.q*+r.c)}   // old-style rows (product id + unit price)
+  const rows=pur.rows.filter(r=>+r.q>0);
+  if(!pur.sid)return alert('اختار المورد');if(!rows.length)return alert('أضف الأصناف اللي اشتريتها');
+  for(const r of rows){if(!findProdByName(r.n)&&!String(r.tn||'').trim())return alert('المنتج ده جديد ومحتاج نوع: '+r.n);if(r.lt===''||!(+r.lt>=0))return alert('تأكد من إجمالي سعر: '+r.n)}
+  const tot=purTot();
+  if(pur.pp=='part'&&pur.rest!==undefined&&pur.rest!==''){const rs=+pur.rest;if(!(rs>0)||rs>tot+.005)return alert('اكتب المبلغ اللي فاضل عليك (أكبر من 0 وأقل من إجمالي الفاتورة)')}
+  else if(pur.pp=='part'&&pur.paid===undefined)return alert('اكتب فاضل عليك كام');
+  const pd=purPaid();if(pd<0||pd>tot+.005)return alert('المدفوع أكبر من إجمالي الفاتورة');
   if(r2(tot-pd)>0.004&&(pur.pm||'one')=='one'&&!pur.due)return alert('اختار يوم دفع الباقي (أو اختار "لسه مش محدد")');
   if((pur.pm||'one')=='plan'&&r2(tot-pd)>0.004){if(!pur.pf)return alert('اختار تاريخ أول قسط');if(!(+pur.pa>0)&&!(+pur.pn>0))return alert('اكتب قيمة القسط أو عدد الأقساط')}
   if((pur.pm||'one')=='one'&&pur.due&&pur.due<pur.d)return alert('يوم الدفع قبل تاريخ الشراء');
-  const s=SUP().find(x=>x.id==pur.sid),iid=id(),items=rows.map(r=>{const p=P(r.pid),bid=id(),ee=pur.ex?(r.e||''):'';S.b.push({id:bid,pid:r.pid,q:+r.q,c:+r.c,e:ee});return{pid:r.pid,n:[p.name,p.fl,p.sz].filter(Boolean).join(' '),q:+r.q,c:+r.c,e:ee,bid}});
+  snapPre('قبل فاتورة شراء');
+  const s=SUP().find(x=>x.id==pur.sid),iid=id();let nP=0,nT=0;const items=rows.map(r=>{let p=findProdByName(r.n);
+    if(!p){const had=!!findType(r.tn),t=ensureType(r.tn);if(!had)nT++;p={id:id(),cid:t.id,name:String(r.n).trim(),br:'',fl:'',sz:'',bc:'',price:0,min:3,h:[],at:{}};S.p.push(p);nP++}
+    const bid=id(),c=+r.lt/+r.q;S.b.push({id:bid,pid:p.id,q:+r.q,c,e:''});return{pid:p.id,n:rn(p).replace(/ · /g,' '),q:+r.q,c,lt:r2(+r.lt),e:'',bid}});
   const x={id:iid,dk:pur.d,seq:nextSeq(PI(),pur.d),t:new Date().toISOString(),d:pur.d,no:pur.no.trim(),due:(pur.pm||'one')=='one'?pur.due:'',sid:s.id,sn:s.n,items,tot,paid:0,by:me.name};PI().unshift(x);
   if(pd>0)spayAlloc(s.id,pd,pur.m,iid);
   if((pur.pm||'one')=='plan'&&r2(tot-x.paid)>0.004){x.plan={pb:x.paid,items:mkPlan(tot-x.paid,pur.pa,pur.pn,pur.pe||'m',pur.pf)};x.due=x.plan.items[0].due}
-  logit('فاتورة شراء','ش-'+x.seq+' ('+fmtD(x.dk)+') '+s.n+' '+money(tot));ssel=s.id;sview=1;pur=null;save();render();beep('ok');
-  toast(['تم حفظ فاتورة الشراء وزودنا المخزون ✔','المتبقي للمورد: '+money(tot-x.paid)],'ok',5000);pp('printPur',iid)}
-function vPur(){const ex=!!pur.ex,pp=pur.pp||'none',R=purRem();
-  return `<div class="card"><h3>١) اشتريت من مين؟</h3><div class="g2"><label>المورد<select onchange="pur.sid=+this.value;purUpd()"><option value="">— اختر المورد —</option>${SUP().map(s=>`<option value="${s.id}" ${s.id==pur.sid?'selected':''}>${esc(s.n)}</option>`).join('')}</select></label><div style="align-self:end"><button onclick="addSup()">+ مورد جديد</button></div>
-  <label>تاريخ الشراء<input type="date" value="${pur.d}" onchange="pur.d=this.value"></label><label>رقم فاتورة المورد (لو عندك)<input value="${esc(pur.no)}" onchange="pur.no=this.value"></label></div></div>
-  <div class="card"><h3>٢) اشتريت إيه وبكام؟</h3><label>🔎 اكتب اسم الصنف أو امسح الباركود واضغط Enter<input id="ps" value="${esc(purq)}" oninput="purS(this.value)" onkeydown="purEnter(event)" autocomplete="off"></label><div id="sg">${sugHtml()}</div>
-  <div class="card w"><table><tr><th>الصنف</th><th>الكمية (قطعة)</th><th>سعر الشراء للقطعة (ج)</th>${ex?'<th>تاريخ الانتهاء</th>':''}<th>الإجمالي</th><th></th></tr>${pur.rows.map((r,i)=>`<tr><td>${nm(P(r.pid))}</td>
-  <td><input class="pi" id="pq${i}" type="number" min="1" step="1" style="width:76px" value="${r.q}" onfocus="this.select()" onkeydown="purKey(event)" onchange="purSet(${i},'q',this.value)"></td>
-  <td><input class="pi" type="number" min="0" step="any" style="width:100px" value="${r.c}" onfocus="this.select()" onkeydown="purKey(event)" onchange="purSet(${i},'c',this.value)"></td>
-  ${ex?`<td><input class="pi" type="date" style="width:140px" value="${r.e}" onkeydown="purKey(event)" onchange="purSet(${i},'e',this.value)"></td>`:''}<td id="pt${i}">${m((+r.q||0)*(+r.c||0))}</td><td><button class="bad" onclick="purDel(${i})">✕</button></td></tr>`).join('')||`<tr><td colspan="${ex?6:5}" class="mu">👆 اكتب اسم أول صنف في الخانة اللي فوق واضغط Enter. بعدها اكتب الكمية وسعر القطعة.</td></tr>`}</table></div>
-  <div class="row"><b>إجمالي الفاتورة: <span id="ptot">${money(purTot())}</span></b></div>
-  <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" style="width:auto" ${ex?'checked':''} onchange="pur.ex=this.checked;render()"> أسجّل تاريخ انتهاء لكل صنف</label></div>
-  <div class="card"><h3>٣) دفعت كام للمورد؟</h3>${seg([['all','دفعت كله'],['part','دفعت جزء'],['none','لسه مادفعتش']],pp,"pur.pp='%'")}
-  ${pp=='part'?`<label>المبلغ اللي دفعته<input type="number" min="0" step="any" value="${pur.paid||''}" onchange="pur.paid=this.value;render()"></label>`:''}
-  ${pp!='none'?`<label>اتدفع إزاي؟<select onchange="pur.m=this.value">${['كاش','تحويل بنكي','فودافون كاش','إنستاباي','شيك'].map(x=>`<option ${x==pur.m?'selected':''}>${x}</option>`).join('')}</select></label>`:''}
-  ${R>0.004?`<small class="mu">الباقي عليك: ${money(R)}</small>`:''}</div>
+  logit('فاتورة شراء','ش-'+x.seq+' ('+fmtD(x.dk)+') '+s.n+' '+money(tot)+(nP?' — '+nP+' منتج جديد':''));ssel=s.id;sview=1;pur=null;IX=null;SRT=null;TYC.clear();save();render();beep('ok');
+  toast(['تم حفظ الفاتورة وزودنا المخزون ✔',(nP?nP+' منتج جديد'+(nT?' (و'+nT+' نوع جديد)':'')+' اتضاف — كمّل سعره وباركوده من "المنتجات ← ✅ استكمال البيانات". ':'')+'المتبقي للمورد: '+money(tot-x.paid)],'ok',nP?9000:5000);pp('printPur',iid)}
+function vPur(){const pp=pur.pp||'none',S0=SUP().find(x=>x.id==pur.sid),T=S.c.filter(x=>x.pid);
+  return `<datalist id="dlT">${T.map(x=>`<option value="${esc(tdisp(x))}">`).join('')}</datalist><datalist id="dlN">${act().map(p=>`<option value="${esc(rn(p))}">`).join('')}</datalist>
+  <div class="card"><h3>🧾 اشتريت من: ${S0?esc(S0.n):'—'}</h3>${S0?'':`<label>المورد<select onchange="pur.sid=+this.value;render()"><option value="">— اختر المورد —</option>${SUP().map(s=>`<option value="${s.id}">${esc(s.n)}</option>`).join('')}</select></label>`}
+  <div class="g2"><label>تاريخ الشراء<input type="date" value="${pur.d}" onchange="pur.d=this.value"></label><label>رقم فاتورة المورد (لو عندك)<input value="${esc(pur.no)}" onchange="pur.no=this.value"></label></div></div>
+  <div class="card"><h3>١) اشتريت إيه؟</h3><div class="g2"><label>النوع (كرياتين، واي بروتين...)<input id="pt" list="dlT" value="${esc(pur.lt||'')}" autocomplete="off" oninput="purNote()" onkeydown="purEnt(event,'pn')"></label>
+  <label>اسم المنتج<input id="pn" list="dlN" autocomplete="off" oninput="purNote()" onchange="purNameCh()" onkeydown="purEnt(event,'pq')"></label>
+  <label>الكمية<input id="pq" type="number" min="0" step="any" oninput="purNote()" onkeydown="purEnt(event,'pl')"></label>
+  <label>إجمالي سعر الكمية دي (كلها بكام؟)<input id="pl" type="number" min="0" step="any" oninput="purNote()" onkeydown="purEnt(event,'add')"></label></div>
+  <div id="pnote" class="mu" style="margin:6px 0"></div><div class="row"><button class="pri" onclick="purAddLine()">➕ أضف الصنف (Enter)</button></div>
+  <div class="card w"><table><tr><th>النوع</th><th>الصنف</th><th>الكمية</th><th>إجمالي سعرها</th><th>سعر القطعة</th><th></th></tr>${pur.rows.map((r,i)=>{const f=purInfo(r);return `<tr><td>${esc(r.tn||tdisp(f.t))}</td><td>${esc(r.n)} ${f.p?'<small class="ok">✔ موجود</small>':f.newType?'<small class="warn">🆕 جديد + نوع جديد</small>':'<small class="warn">🆕 جديد</small>'}</td>
+  <td><input class="pi" type="number" min="0" step="any" style="width:80px" value="${r.q}" onchange="purSetRow(${i},'q',this.value)"></td><td><input class="pi" type="number" min="0" step="any" style="width:110px" value="${r.lt}" onchange="purSetRow(${i},'lt',this.value)"></td><td id="pu${i}">${+r.q>0?money(r.lt/r.q):'—'}</td><td><button class="bad" onclick="purDel(${i})">✕</button></td></tr>`}).join('')||'<tr><td colspan="6" class="mu">👆 اكتب النوع واسم المنتج والكمية وإجمالي سعرها، وبعدين Enter. الصنف هيتضاف للمنتجات والمخزون أوتوماتيك.</td></tr>'}</table></div>
+  <div class="row"><b>إجمالي الفاتورة: <span id="ptot">${money(purTot())}</span></b></div></div>
+  <div class="card"><h3>٢) دفعت كام للمورد؟</h3>${seg([['all','✔ تم دفع المبلغ كله'],['part','فاضل عليا مبلغ'],['none','لسه ما دفعتش حاجة']],pp,"pur.pp='%'")}
+  ${pp=='part'?`<label>فاضل عليا كام؟<input id="prest" type="number" min="0" step="any" value="${pur.rest??''}" oninput="pur.rest=this.value;purUpd()" onchange="render()"></label><small class="mu" id="prinfo">يعني دفعت ${money(purPaid())}</small>`:''}
+  ${pp!='none'?`<label>اتدفع إزاي؟<select onchange="pur.m=this.value">${['كاش','تحويل بنكي','فودافون كاش','إنستاباي','شيك'].map(x=>`<option ${x==pur.m?'selected':''}>${x}</option>`).join('')}</select></label>`:''}</div>
   ${purRest()}
-  <div class="card"><h3>📋 الملخص</h3><div id="psum">${purSumm()}</div><div class="row"><button class="pri" onclick="savePur()">💾 حفظ الفاتورة وإضافة المخزون</button><button onclick="purCancel()">إلغاء</button></div></div>`}
+  <div class="card"><h3>📋 الملخص</h3><div id="psum">${purSumm()}</div><div class="row"><button class="pri" onclick="savePur()">💾 حفظ وإضافة للمنتجات والمخزون</button><button onclick="purCancel()">إلغاء</button></div></div>`}
 function sqs(v){spq=v;render();const i=$('#spq');i.focus();i.setSelectionRange(v.length,v.length)}
 let sview=0;
 function vSup(){if(pur)return vPur();
   const C=supList().sort((a,b)=>((b.owed>0.004)-(a.owed>0.004))||b.od-a.od||b.owed-a.owed||b.last.localeCompare(a.last)),k=norm(spq),L=C.filter(c=>!k||norm(c.n).includes(k)||(dg(spq)&&dg(c.ph).includes(dg(spq)))).slice(0,80),sel=C.find(c=>c.id==ssel),own=supOwed(),nOwe=C.filter(c=>c.owed>0.004).length;
   if(sview&&sel)return supDetail(sel);
   return `<div class="card"><div class="mu">عليا للموردين (اشتريت ولسه ما دفعتش)</div><b class="${own>0.004?'bad':'ok'}" style="font-size:2em;display:block;margin:4px 0">${own>0.004?money(own):'✔ مفيش'}</b>${nOwe?`<small class="mu">لـ ${nOwe} مورد</small>`:''}</div>
-  <div class="row"><button class="pri" onclick="newPur()">🧾 فاتورة شراء جديدة</button><button onclick="addSup()">+ مورد جديد</button></div>
+  <div class="row"><button class="pri" onclick="addSup()">+ مورد جديد</button></div>
   <div class="card"><label>🔎 دوّر على مورد<input id="spq" value="${esc(spq)}" oninput="sqs(this.value)"></label>
   ${L.map(c=>`<div class="ln" onclick="ssel=${c.id};sview=1;render()"><span>${esc(c.n)}<small>${esc(c.ph||'')}${c.od?' · <b class="bad">ميعاد دفع فات</b>':''}</small></span>${c.owed>0.004?`<span><b class="bad">عليا ${money(c.owed)}</b>${c.nx?`<small class="mu">ميعاد الدفع ${fmtD(c.nx.d)}</small>`:''}</span>`:c.n_?'<b class="ok">✔ مسدد</b>':'<small class="mu">لسه مفيش فواتير</small>'}</div>`).join('')||'<p class="mu">مفيش موردين. اضغط "+ مورد جديد".</p>'}</div>`}
 function supDetail(c){const own=can('a_voidfin'),I=PI().filter(x=>x.sid==c.id),Pm=SPP().filter(p=>p.sid==c.id);
@@ -895,7 +936,7 @@ function supDetail(c){const own=can('a_voidfin'),I=PI().filter(x=>x.sid==c.id),P
   <div style="margin:10px 0"><span class="mu">لسه عليا له</span><b class="${c.owed>0.004?'bad':'ok'}" style="font-size:2em;display:block">${c.owed>0.004?money(c.owed):'✔ مسدد'}</b></div>
   ${c.nx&&c.owed>0.004?`<div class="${dl(c.nx.d)}">الدفعة الجاية: ${money(c.nx.a)} يوم ${fmtD(c.nx.d)}${dayDiff(c.nx.d)<0?' (فات ميعادها)':''}</div>`:''}
   <small class="mu">اشتريت بإجمالي ${money(c.tot)} · دفعت ${money(c.paid)}${c.lastBuy?' · آخر شراء '+fmtD(c.lastBuy):''}${c.lp?' · آخر دفعة '+fmtD(cairo(c.lp.t)):''}</small>
-  <div class="row"><button class="pri" onclick="supPay(${c.id})">💵 دفعت له</button><button onclick="newPur(${c.id})">🧾 اشتريت منه</button><button onclick="supStmt(${c.id})">🖨️ كشف حساب</button></div></div>
+  <div class="row"><button class="pri" onclick="newPur(${c.id})">🧾 اشتريت منه</button><button onclick="supPay(${c.id})">💵 دفعت له</button><button onclick="supStmt(${c.id})">🖨️ كشف حساب</button></div></div>
   ${sch.length?`<div class="card"><h3>📅 مواعيد الدفع</h3>${sch.map(s=>`<div class="ln" style="cursor:default"><span>${fmtD(s.d)}<small class="mu">${s.l}</small></span><span><b>${money(s.a)}</b> ${stS(s)}</span></div>`).join('')}</div>`:''}
   <div class="card"><h3>🧾 فواتير الشراء</h3>${I.map(card).join('')||'<p class="mu">لسه مفيش فواتير</p>'}</div>
   <div class="card"><h3>💵 الدفعات اللي دفعتها</h3>${Pm.map(p=>`<div class="ln" style="cursor:default${p.void?';opacity:.55':''}"><span>${fmtD(cairo(p.t))}<small class="mu">${esc(p.m)} · على ${p.alloc.map(a=>piRef(a.iid)).join('، ')}${p.edits?' · اتعدّلت':''}${p.void?' · ملغاة':''}</small></span><span><b>${money(p.amt)}</b> ${own&&!p.void?`<button onclick="editSPay(${p.id})">تعديل</button> <button class="bad" onclick="voidSPay(${p.id})">إلغاء</button>`:''}</span></div>`).join('')||'<p class="mu">لسه مفيش دفعات</p>'}</div>`}
@@ -938,7 +979,7 @@ function rxPay(i){const r=RX().find(x=>x.id==i),n=r&&rxNext(r);if(!n)return;
     if(!(+o.amt>0)||o.d>today())return alert('راجع المبلغ والتاريخ');const e={id:id(),cat:r.cat,amt:+o.amt,d:o.d,cash:o.cash=='1',note:((r.name||'')+' (ثابت — '+n.ym+')').trim(),by:me.name,rx:r.id};
     (S.ex=S.ex||[]).unshift(e);r.done=r.done||{};r.done[n.ym]=e.id;logit('دفع مصروف ثابت',r.cat+' '+e.amt);save();render();beep('ok');toast('اتسجّل في المصاريف ✔','ok',2500)})}
 function vRx(){return `<div class="card"><h3>🔁 المصاريف الثابتة (إيجار، مرتبات...) <button onclick="addRx()">+ مصروف ثابت</button></h3>${RX().map(r=>{const n=rxNext(r),dy=n?dayDiff(n.d):0;return `<div class="ln" style="cursor:default"><span><b>${esc(r.cat)}</b>${r.name?' · '+esc(r.name):''}<small class="mu">${money(r.amt)} · يوم ${r.day} من كل شهر · تنبيه قبلها بـ ${r.remind} يوم</small>${n?`<small class="${dy<0?'bad':dy<=r.remind?'warn':'mu'}">الجاي: ${fmtD(n.d)} — ${dtx(dy)}</small>`:''}</span><span><button class="pri" onclick="rxPay(${r.id})">سجّل دفعه</button> <button onclick="addRx(${r.id})">تعديل</button> <button class="bad" onclick="delRx(${r.id})">حذف</button></span></div>`}).join('')||'<p class="mu">لسه مفيش. ضيف الإيجار مثلًا وحدد يوم الدفع وقبلها بكام يوم تتنبّه.</p>'}</div>`}
-const purPaid=()=>{const m=pur.pp||'none',t=purTot();return m=='all'?t:m=='part'?r2(Math.min(+pur.paid||0,t)):0};
+const purPaid=()=>{const m=pur.pp||'none',t=purTot();return m=='all'?t:m=='part'?(pur.rest!==undefined&&pur.rest!==''?r2(Math.max(0,Math.min(t,t-(+pur.rest||0)))):r2(Math.max(0,Math.min(+pur.paid||0,t)))):0};
 const purRem=()=>Math.max(0,r2(purTot()-purPaid()));
 const seg=(L,cur,h)=>`<div class="row">${L.map(([v,l])=>`<button class="${v==cur?'pri':''}" onclick="${h.replace('%',v)};render()">${l}</button>`).join('')}</div>`;
 function planPvHtml(){if(!pur||(pur.pm||'one')!='plan')return'';const R=purRem();if(R<=0)return'<small class="mu">مفيش متبقي يتقسّط</small>';
@@ -996,12 +1037,22 @@ function loadMyList(){if(me.role!='owner')return alert('للمالك فقط');
   for(const x of add){const c=find(x.tn)||o,at={},m=x.sz.match(/^(\d+)\s*جرعه/);if(m&&defs(c.id).some(a=>a.key=='scoops'))at.scoops=+m[1];
     S.p.push({id:id(),cid:c.id,name:x.n,br:'',fl:'',sz:x.sz,bc:'',price:0,min:3,h:[],at})}
   logit('تحميل قايمة المنتجات',add.length+' منتج');save();render();beep('ok');toast(['اتضاف '+add.length+' منتج ✔','دلوقتي سعّرهم من 💲 تسعير سريع'],'ok',6000)}
-let qpm=false;
-function vQp(){const L0=act().filter(p=>!(p.price>0)),L=L0.slice(0,100);
-  return `<div class="card"><div class="row"><button onclick="qpm=false;render()">◀ رجوع للمنتجات</button><b id="qpc">${L0.length} منتج من ${act().length} من غير سعر</b></div><small class="mu">اكتب سعر البيع واضغط Enter للمنتج اللي بعده. بيتحفظ فورًا. (بيظهر أول 100 منتج، والباقي بعد ما تخلصهم)</small></div>
-  <div class="card w"><table><tr><th>المنتج</th><th>النوع</th><th>سعر البيع</th></tr>${L.map(p=>`<tr><td>${nm(p)}</td><td>${esc(tname(p.cid))}</td><td><input class="qpi" type="number" min="0" step="any" style="width:110px" onkeydown="qpKey(event)" onchange="qpSet(${p.id},this.value)"></td></tr>`).join('')||'<tr><td colspan="3" class="ok">كل المنتجات ليها سعر ✔</td></tr>'}</table></div>`}
-function qpSet(i,v){const p=P(i),n=+v;if(!(n>0))return;p.h.push([today(),p.price,n]);p.price=n;save();const e=$('#qpc');if(e)e.textContent=act().filter(x=>!(x.price>0)).length+' منتج من '+act().length+' من غير سعر'}
-function qpKey(e){if(e.key!=='Enter')return;e.preventDefault();const a=[...document.querySelectorAll('.qpi')],n=a[a.indexOf(e.target)+1];if(n)n.focus()}
+let qpm=false,qpf='miss',qps='';
+const qpMiss=p=>!(p.price>0)||!p.bc,qpOk=p=>(p.price>0&&p.bc)?'<b class="ok">✔</b>':'';
+function vQp(){TYC.clear();const A=act(),nP=A.filter(p=>!(p.price>0)).length,nB=A.filter(p=>!p.bc).length,nA=A.filter(qpMiss).length,
+  f=qpf=='price'?(p=>!(p.price>0)):qpf=='bc'?(p=>!p.bc):qpf=='all'?(()=>true):qpMiss,w=qwA(qps),L0=sorted().filter(p=>f(p)&&hit2(p,w)),L=L0.slice(0,100);
+  return `<div class="card"><div class="row"><button onclick="qpm=false;render()">◀ رجوع للمنتجات</button><b id="qpc">${nA} منتج ناقص بيانات</b></div>
+  <div class="row">${[['miss','الناقص ('+nA+')'],['price','بدون سعر ('+nP+')'],['bc','بدون باركود ('+nB+')'],['all','كل المنتجات']].map(([k,l])=>`<button class="${k==qpf?'pri':''}" onclick="qpf='${k}';render()">${l}</button>`).join('')}</div>
+  <label>🔎 دوّر بالاسم أو النوع (F2) واختار المنتج اللي في إيدك<input id="qps" value="${esc(qps)}" oninput="sqps(this.value)" autocomplete="off"></label>
+  <small class="mu">اكتب السعر والباركود واضغط Enter (بيروح للخانة اللي بعدها). تقدر تمسح الباركود بالسكانر وإنت واقف في خانة الباركود، أو تمسحه من برا فيفتح لك المنتج. بيتحفظ فورًا.${L0.length>100?' (بيظهر أول 100، ضيّق البحث)':''}</small></div>
+  <div class="card w"><table><tr><th>المنتج</th><th>سعر البيع</th><th>الباركود</th><th></th></tr>${L.map(p=>`<tr><td>${nm(p)}<small class="mu">${esc(tdisp(cat(p.cid)))}</small></td>
+  <td><input class="qpi" id="qp${p.id}" type="number" min="0" step="any" style="width:110px" value="${p.price>0?p.price:''}" onkeydown="qpKey(event)" onchange="qpSet(${p.id},this.value)"></td>
+  <td><input class="qpi" id="qb${p.id}" dir="ltr" style="width:170px" value="${esc(p.bc||'')}" onkeydown="qpKey(event)" onchange="qbSet(${p.id},this)"></td><td id="qs${p.id}">${qpOk(p)}</td></tr>`).join('')||'<tr><td colspan="4" class="ok">✔ مفيش حاجة ناقصة هنا</td></tr>'}</table></div>`}
+function sqps(v){qps=v;render();const i=$('#qps');if(i){i.focus();i.setSelectionRange(v.length,v.length)}}
+function qpRef(p){const e=$('#qs'+p.id);if(e)e.innerHTML=qpOk(p);const c=$('#qpc');if(c)c.textContent=act().filter(qpMiss).length+' منتج ناقص بيانات'}
+function qpSet(i,v){const p=P(i),n=+v;if(!(n>0))return;if(n!==p.price){p.h.push([today(),p.price,n]);p.price=n;save()}qpRef(p)}
+function qbSet(i,el){const p=P(i),b=bcn(el.value);if(b===(p.bc||''))return;const o=b&&act().find(x=>x.id!==p.id&&x.bc===b);if(o){alert('الباركود ده مستخدم في منتج تاني: '+rn(o));el.value=p.bc||'';return}p.bc=b;logit('باركود منتج',rn(p));save();qpRef(p)}
+function qpKey(e){if(e.key!=='Enter')return;e.preventDefault();const a=[...document.querySelectorAll('.qpi')],n=a[a.indexOf(e.target)+1];if(n){n.focus();n.select&&n.select()}}
 /* ---------- Desktop (Electron) layer ---------- */
 let UPD={state:'idle',version:'',percent:0,current:''},updBk='';
 async function updSafetyCopy(ver){try{flushSave();await bkAuto(true);const r=await shopAPI.savePreUpdate(JSON.stringify(S),ver);return !!(r&&r.ok)}catch(e){return false}}
@@ -1042,8 +1093,9 @@ if(window.shopAPI&&shopAPI.onBeforeClose)shopAPI.onBeforeClose(async()=>{try{flu
 function onScan(code){if(!me)return;
   code=bcn(code);const p=ix().bc.get(code);
   if(tab==='pos'){if(!p){beep('err');return linkBc(code)}if(stock(p.id)<1){beep('err');return toast('نفد من المخزون: '+rn(p),'bad',4000)}add(p.id)}
+  else if(tab==='prod'&&qpm){if(p){beep('ok');qpf='all';qps=rn(p);render();const i=$('#qp'+p.id);if(i){i.focus();i.select()}}else{beep('warn');linkBc(code)}}
   else if(tab==='prod'){beep(p?'ok':'warn');p?addStock(p.id):addProd(code)}
-  else if(tab==='sup'&&pur){if(p){beep('ok');purAdd(p.id,false)}else{beep('err');toast('الباركود ده مش متسجل كمنتج','bad',3000)}}
+  else if(tab==='sup'&&pur){if(p){beep('ok');purPick(p)}else{beep('err');toast('الباركود ده مش متسجل كمنتج. اكتب نوعه واسمه بإيدك.','bad',3500)}}
 }
 let buf='',last=0,cs=null,ct=null;
 const bcn=s=>String(s==null?'':s).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).trim();
@@ -1053,11 +1105,13 @@ addEventListener('keydown',e=>{
   if(e.key==='Enter'||e.key==='Tab'){const c=bcn(buf);buf='';if(c.length>=4&&/^[0-9A-Za-z\-_.]+$/.test(c)){if(e.key==='Tab')e.preventDefault();onScan(c)}}else if(e.key.length===1)buf+=e.key;
 });
 const visTabs=()=>Object.keys(tabs).filter(k=>can('t_'+k)),SRCH={pos:['#q',v=>sq(v)],prod:['#prq',v=>sprq(v)],inv:['#ivq',v=>siq(v)],cr:['#crq',v=>sqc(v)],sup:['#spq',v=>sqs(v)]};
-function focusSearch(){const s=SRCH[tab];let i=s&&$(s[0]);
+function focusSearch(){if(tab=='prod'&&qpm){const i=$('#qps');if(i){i.focus();i.select();return}}
+  if(tab=='sup'&&pur){const i=$('#pn');if(i){i.focus();return}}
+  const s=SRCH[tab];let i=s&&$(s[0]);
   if(!i){if(tab=='cr'&&crSel){crSel='';render()}else if(tab=='sup'&&sview&&!pur){sview=0;render()}i=s&&$(s[0])}
   if(!i&&can('t_pos')){go('pos');i=$('#q')}if(i){i.focus();i.select&&i.select()}}
 function goBack(){const a=document.activeElement,typing=a&&a.matches&&a.matches('input,textarea,select');
-  if(typing){const s=SRCH[tab];if(s&&a.id==s[0].slice(1)&&a.value)return s[1]('');if(a.id=='ps'&&a.value){a.value='';return purS('')}a.blur();return}
+  if(typing){const s=SRCH[tab];if(s&&a.id==s[0].slice(1)&&a.value)return s[1]('');if(a.id=='qps'&&a.value){qps='';return render()}a.blur();return}
   if(tab=='cr'&&crSel){crSel='';return render()}
   if(tab=='sup'){if(pur)return purCancel();if(sview){sview=0;return render()}}
   if(tab=='prod'){if(qpm){qpm=false;return render()}if(prq)return sprq('')}

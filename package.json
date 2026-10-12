@@ -1,7 +1,7 @@
 {
   "name": "mb-store",
   "productName": "MB Store",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "MB Store POS (desktop)",
   "main": "main.js",
   "author": "MB",

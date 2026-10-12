@@ -132,6 +132,8 @@ function setupUpdater() {
   if (E2E && !process.env.MB_UPDATE_TEST) { upd.state = 'disabled'; return; }
   const yml = path.join(process.resourcesPath || '', 'app-update.yml');
   if (!app.isPackaged || !fs.existsSync(yml)) { upd.state = 'unsupported'; log('updater off: not an installer build (no app-update.yml)'); return; }
+  let ymlTxt = ''; try { ymlTxt = fs.readFileSync(yml, 'utf8'); } catch (_) {}
+  if (!/^provider:/m.test(ymlTxt)) { upd.state = 'unsupported'; log('updater off: app-update.yml has no provider (build the release with the GitHub workflow, or set "repository" in package.json)'); return; }
   try { autoUpdater = require('electron-updater').autoUpdater; } catch (e) { upd.state = 'unsupported'; log('electron-updater missing', e && e.message); return; }
   autoUpdater.logger = { info: (m) => log('updater', m), warn: (m) => log('updater warn', m), error: (m) => log('updater error', m), debug() {} };
   autoUpdater.autoDownload = false;          // never download behind the user's back: ask first (download now / later)
