@@ -1,10 +1,12 @@
 name: Release Windows installer
-# Push a tag like v1.0.1 (same number as "version" in package.json) and this builds the installer
-# and publishes a GitHub Release with MB-Store-Setup-x.y.z.exe + latest.yml (what the app checks for updates).
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'رقم الإصدار الجديد (مثال 1.0.3 - من غير v)'
+        required: true
 permissions:
   contents: write
 jobs:
@@ -16,6 +18,13 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - name: Set version (from tag or manual input)
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') { $v = '${{ inputs.version }}' } else { $v = '${{ github.ref_name }}' }
+          $v = $v.Trim().TrimStart('v')
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Bad version: $v" }
+          npm version $v --no-git-tag-version --allow-same-version
       - name: Tell the build which GitHub repo the updates come from
         run: npm pkg set repository.type=git repository.url=https://github.com/${{ github.repository }}.git
       - name: Build and publish the release
