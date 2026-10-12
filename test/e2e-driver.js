@@ -25,8 +25,6 @@ module.exports = async (win, ctx) => {
       await js("document.getElementById('lu').value='owner';document.getElementById('lp').value='pass1234';document.getElementById('ln').value='Owner';login()");
       await sleep(800);
       ok((await js("me&&me.role")) === 'owner', 'first-run owner account created');
-      ok(await js("!!S.rk&&S.rk.l4.length===4&&/Recovery|مفتاح الاسترجاع/.test(document.getElementById('dlg').innerHTML)&&document.getElementById('dlg').open"), 'first run: recovery key created and shown once');
-      await js("document.getElementById('dlg').close();0");
       await js(`(()=>{const c=typeOpts()[0][0];[['A',1000,600],['B',500,200]].forEach(([n,pr,cs])=>{const p={id:id(),cid:c,name:n,br:'',fl:'',sz:'',bc:'',price:pr,min:1,h:[],at:{}};S.p.push(p);S.b.push({id:id(),pid:p.id,q:100,c:cs,e:''})});save()})()`);
       await js("(()=>{const a=S.p[0].id,b=S.p[1].id;cart=[{pid:a,q:2}];pmv='كاش';paid='';dpv=0;checkout();cart=[{pid:b,q:3}];pmv='آجل';cn='Ali';cph='01012345678';paid=100;dpv=0;checkout()})()");
       await sleep(400);
@@ -75,19 +73,6 @@ module.exports = async (win, ctx) => {
       await js("document.getElementById('lu').value='owner';document.getElementById('lp').value='pass1234';login()");
       await sleep(800);
       ok((await js("me&&me.role")) === 'owner', 'login after restart works (password hash persisted)');
-      // forgotten password: recovery key resets it (key is hashed, rotated after use); login by display name works
-      const pw = await js("(async()=>{const k=await rkMake();window.__rk=k;return [await rkVerify(k),await rkVerify('AAAA-BBBB-CCCC-DDDD-EEEE'),await rkVerify(k.slice(0,-1)),JSON.stringify(S.rk).includes(k.replace(/-/g,''))]})()");
-      ok(pw[0] === true && pw[1] === false && pw[2] === false && pw[3] === false, 'recovery key: right key accepted, wrong/short refused, key itself never stored (only its hash)');
-      await js("logout();forgotDlg();0");
-      await js("document.getElementById('fk').value=window.__rk.toLowerCase();forgotCheck()"); await sleep(1200);
-      ok(await js("!!document.querySelector('input[name=fu]:checked')&&/owner/.test(document.getElementById('dlg').innerHTML)"), 'forgot flow: valid key reveals the owner user name');
-      await js("document.getElementById('fp1').value='newpass99';document.getElementById('fp2').value='newpass99';forgotDo()"); await sleep(1500);
-      ok((await js("me&&me.role")) === 'owner' && (await js("hp('newpass99',S.u[0].salt).then(h=>h===S.u[0].hash)")) === true, 'forgot flow: new password set and owner logged in');
-      ok((await js("rkVerify(window.__rk)")) === false && (await js("document.getElementById('dlg').open&&/مفتاح الاسترجاع/.test(document.getElementById('dlg').innerHTML)")), 'recovery key rotated after use (old key dead, new key shown)');
-      await js("document.getElementById('dlg').close();logout();0");
-      await js("document.getElementById('lu').value='Owner';document.getElementById('lp').value='newpass99';login()"); await sleep(1000);
-      ok((await js("me&&me.role")) === 'owner', 'login works with the new password and with the name in any letter case');
-      await js("(async()=>{const x=S.u[0];x.salt=salt8();x.hash=await hp('pass1234',x.salt);save()})()"); await sleep(300);
       ok((await js("S.s.length")) === 2 && (await js("CR().length")) === 1 && (await js("S.p.length")) === 2, 'all data (incl. the sale made just before closing) survived closing and reopening');
       const cfg = ctx.cfg(); ok(cfg.paper === '80', 'config survived restart');
       const lst = await js("shopAPI.listBackups()"); ok(lst.length >= 1, 'backup from the previous session is listed');

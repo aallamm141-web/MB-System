@@ -59,6 +59,8 @@
     "publish": [
       {
         "provider": "github",
+        "owner": "aallamm141-web",
+        "repo": "MB-System",
         "releaseType": "release"
       }
     ]
