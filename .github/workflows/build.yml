@@ -25,6 +25,15 @@ jobs:
           $v = $v.Trim().TrimStart('v')
           if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Bad version: $v" }
           npm version $v --no-git-tag-version --allow-same-version
+      - name: Create the tag (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $v = '${{ inputs.version }}'.Trim().TrimStart('v')
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git tag "v$v"
+          git push origin "v$v"
       - name: Tell the build which GitHub repo the updates come from
         run: npm pkg set repository.type=git repository.url=https://github.com/${{ github.repository }}.git
       - name: Build and publish the release
